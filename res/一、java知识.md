@@ -48,21 +48,1048 @@
 
   > 1、linkedHashMap数据结构是数组和链表，并且依靠双向链表保证迭代顺序是插入的顺序。
 
-## 集合类面试题
+## **HashMap源码剖析.**
 
-* ArrayList 跟linkList的区别
+\###HashMap简介 HashMap是基于哈希表实现的，每一个元素都是一个key-value对，其内部通过单链表解决冲突问题，容量不足（超过了阈值）时，同样会自动增长。
 
-  * 1、底层数据结构不同，ArrayList 数据结构是数组，通过索引可以查询到对应的数据。LinkedList 数据结构是双向链表结构，每个元素都有上一个和下一个元素的引用。
-  * 2、 相对于ArrayList ,LinkedList 的插入、添加、删除速度更快，因为元素添加到集合种任意位置的时候，不需要像数组那样重新计算大小或者是更新索引。但是，查询速度更慢，数组通过索引就可以查到数据，链表只能挨个查询。
-  * 3、LinkedList比ArrayList 更占内存，因为LinkedList为每一个节点存储了两个引用，一个指向上一个元素，一个指向下一个元素。
-* ArrayList的数组大小是如何保证可以添加大量数据的
-  * arraylist 有一个自动扩容的机制，如果arraylist的大小已经不满足需求时，那么将数组变原长度的1.5倍，之后操作就是把老的数组拷贝到新的数组里面。
-* hashMap的实现原理
+HashMap是非线程安全的，只是用于单线程环境下，多线程环境下可以采用concurrent并发包下的concurrentHashMap。
 
-  * HashMap 结构
-* 数据+链表。每个entry元素就是一个数组的元素，它将key-value 的数值以键值队的形式进行存储，并且entry 是一个链表结构，next 指向另外一个entry 元素
-  * HashMap 工作原理
-    * HashMap 基于 hashing 原理，我们通过 put() 和 get() 方法储存和获取对象。当我们将键值对传递给 put() 方法时，它调用键对象的 hashCode() 方法来计算 hashcode，让后找到 bucket 位置来储存 Entry 对象。当两个对象的 hashcode 相同时，它们的 bucket 位置相同，‘碰撞’会发生。因为 HashMap 使用链表存储对象，这个 Entry 会存储在链表中，当获取对象时，通过键对象的 equals() 方法找到正确的键值对，然后返回值对象。
+HashMap实现了Serializable接口，因此它支持序列化，实现了Cloneable接口，能被克隆。
+
+\###HashMap源码剖析
+
+HashMap的源码如下（加入了比较详细的注释）：
+
+```
+package java.util;    
+import java.io.*;    
+   
+public class HashMap<K,V>    
+    extends AbstractMap<K,V>    
+    implements Map<K,V>, Cloneable, Serializable    
+{    
+   
+    // 默认的初始容量（容量为HashMap中槽的数目）是16，且实际容量必须是2的整数次幂。    
+    static final int DEFAULT_INITIAL_CAPACITY = 16;    
+   
+    // 最大容量（必须是2的幂且小于2的30次方，传入容量过大将被这个值替换）    
+    static final int MAXIMUM_CAPACITY = 1 << 30;    
+   
+    // 默认加载因子为0.75   
+    static final float DEFAULT_LOAD_FACTOR = 0.75f;    
+   
+    // 存储数据的Entry数组，长度是2的幂。    
+    // HashMap采用链表法解决冲突，每一个Entry本质上是一个单向链表    
+    transient Entry[] table;    
+   
+    // HashMap的底层数组中已用槽的数量    
+    transient int size;    
+   
+    // HashMap的阈值，用于判断是否需要调整HashMap的容量（threshold = 容量*加载因子）    
+    int threshold;    
+   
+    // 加载因子实际大小    
+    final float loadFactor;    
+   
+    // HashMap被改变的次数    
+    transient volatile int modCount;    
+   
+    // 指定“容量大小”和“加载因子”的构造函数    
+    public HashMap(int initialCapacity, float loadFactor) {    
+        if (initialCapacity < 0)    
+            throw new IllegalArgumentException("Illegal initial capacity: " +    
+                                               initialCapacity);    
+        // HashMap的最大容量只能是MAXIMUM_CAPACITY    
+        if (initialCapacity > MAXIMUM_CAPACITY)    
+            initialCapacity = MAXIMUM_CAPACITY;    
+        //加载因此不能小于0  
+        if (loadFactor <= 0 || Float.isNaN(loadFactor))    
+            throw new IllegalArgumentException("Illegal load factor: " +    
+                                               loadFactor);    
+   
+        // 找出“大于initialCapacity”的最小的2的幂    
+        int capacity = 1;    
+        while (capacity < initialCapacity)    
+            capacity <<= 1;    
+   
+        // 设置“加载因子”    
+        this.loadFactor = loadFactor;    
+        // 设置“HashMap阈值”，当HashMap中存储数据的数量达到threshold时，就需要将HashMap的容量加倍。    
+        threshold = (int)(capacity * loadFactor);    
+        // 创建Entry数组，用来保存数据    
+        table = new Entry[capacity];    
+        init();    
+    }    
+   
+   
+    // 指定“容量大小”的构造函数    
+    public HashMap(int initialCapacity) {    
+        this(initialCapacity, DEFAULT_LOAD_FACTOR);    
+    }    
+   
+    // 默认构造函数。    
+    public HashMap() {    
+        // 设置“加载因子”为默认加载因子0.75    
+        this.loadFactor = DEFAULT_LOAD_FACTOR;    
+        // 设置“HashMap阈值”，当HashMap中存储数据的数量达到threshold时，就需要将HashMap的容量加倍。    
+        threshold = (int)(DEFAULT_INITIAL_CAPACITY * DEFAULT_LOAD_FACTOR);    
+        // 创建Entry数组，用来保存数据    
+        table = new Entry[DEFAULT_INITIAL_CAPACITY];    
+        init();    
+    }    
+   
+    // 包含“子Map”的构造函数    
+    public HashMap(Map<? extends K, ? extends V> m) {    
+        this(Math.max((int) (m.size() / DEFAULT_LOAD_FACTOR) + 1,    
+                      DEFAULT_INITIAL_CAPACITY), DEFAULT_LOAD_FACTOR);    
+        // 将m中的全部元素逐个添加到HashMap中    
+        putAllForCreate(m);    
+    }    
+   
+    //求hash值的方法，重新计算hash值  
+    static int hash(int h) {    
+        h ^= (h >>> 20) ^ (h >>> 12);    
+        return h ^ (h >>> 7) ^ (h >>> 4);    
+    }    
+   
+    // 返回h在数组中的索引值，这里用&代替取模，旨在提升效率   
+    // h & (length-1)保证返回值的小于length    
+    static int indexFor(int h, int length) {    
+        return h & (length-1);    
+    }    
+   
+    public int size() {    
+        return size;    
+    }    
+   
+    public boolean isEmpty() {    
+        return size == 0;    
+    }    
+   
+    // 获取key对应的value    
+    public V get(Object key) {    
+        if (key == null)    
+            return getForNullKey();    
+        // 获取key的hash值    
+        int hash = hash(key.hashCode());    
+        // 在“该hash值对应的链表”上查找“键值等于key”的元素    
+        for (Entry<K,V> e = table[indexFor(hash, table.length)];    
+             e != null;    
+             e = e.next) {    
+            Object k;    
+            //判断key是否相同  
+            if (e.hash == hash && ((k = e.key) == key || key.equals(k)))    
+                return e.value;    
+        }  
+        //没找到则返回null  
+        return null;    
+    }    
+   
+    // 获取“key为null”的元素的值    
+    // HashMap将“key为null”的元素存储在table[0]位置，但不一定是该链表的第一个位置！    
+    private V getForNullKey() {    
+        for (Entry<K,V> e = table[0]; e != null; e = e.next) {    
+            if (e.key == null)    
+                return e.value;    
+        }    
+        return null;    
+    }    
+   
+    // HashMap是否包含key    
+    public boolean containsKey(Object key) {    
+        return getEntry(key) != null;    
+    }    
+   
+    // 返回“键为key”的键值对    
+    final Entry<K,V> getEntry(Object key) {    
+        // 获取哈希值    
+        // HashMap将“key为null”的元素存储在table[0]位置，“key不为null”的则调用hash()计算哈希值    
+        int hash = (key == null) ? 0 : hash(key.hashCode());    
+        // 在“该hash值对应的链表”上查找“键值等于key”的元素    
+        for (Entry<K,V> e = table[indexFor(hash, table.length)];    
+             e != null;    
+             e = e.next) {    
+            Object k;    
+            if (e.hash == hash &&    
+                ((k = e.key) == key || (key != null && key.equals(k))))    
+                return e;    
+        }    
+        return null;    
+    }    
+   
+    // 将“key-value”添加到HashMap中    
+    public V put(K key, V value) {    
+        // 若“key为null”，则将该键值对添加到table[0]中。    
+        if (key == null)    
+            return putForNullKey(value);    
+        // 若“key不为null”，则计算该key的哈希值，然后将其添加到该哈希值对应的链表中。    
+        int hash = hash(key.hashCode());    
+        int i = indexFor(hash, table.length);    
+        for (Entry<K,V> e = table[i]; e != null; e = e.next) {    
+            Object k;    
+            // 若“该key”对应的键值对已经存在，则用新的value取代旧的value。然后退出！    
+            if (e.hash == hash && ((k = e.key) == key || key.equals(k))) {    
+                V oldValue = e.value;    
+                e.value = value;    
+                e.recordAccess(this);    
+                return oldValue;    
+            }    
+        }    
+   
+        // 若“该key”对应的键值对不存在，则将“key-value”添加到table中    
+        modCount++;  
+        //将key-value添加到table[i]处  
+        addEntry(hash, key, value, i);    
+        return null;    
+    }    
+   
+    // putForNullKey()的作用是将“key为null”键值对添加到table[0]位置    
+    private V putForNullKey(V value) {    
+        for (Entry<K,V> e = table[0]; e != null; e = e.next) {    
+            if (e.key == null) {    
+                V oldValue = e.value;    
+                e.value = value;    
+                e.recordAccess(this);    
+                return oldValue;    
+            }    
+        }    
+        // 如果没有存在key为null的键值对，则直接题阿见到table[0]处!    
+        modCount++;    
+        addEntry(0, null, value, 0);    
+        return null;    
+    }    
+   
+    // 创建HashMap对应的“添加方法”，    
+    // 它和put()不同。putForCreate()是内部方法，它被构造函数等调用，用来创建HashMap    
+    // 而put()是对外提供的往HashMap中添加元素的方法。    
+    private void putForCreate(K key, V value) {    
+        int hash = (key == null) ? 0 : hash(key.hashCode());    
+        int i = indexFor(hash, table.length);    
+   
+        // 若该HashMap表中存在“键值等于key”的元素，则替换该元素的value值    
+        for (Entry<K,V> e = table[i]; e != null; e = e.next) {    
+            Object k;    
+            if (e.hash == hash &&    
+                ((k = e.key) == key || (key != null && key.equals(k)))) {    
+                e.value = value;    
+                return;    
+            }    
+        }    
+   
+        // 若该HashMap表中不存在“键值等于key”的元素，则将该key-value添加到HashMap中    
+        createEntry(hash, key, value, i);    
+    }    
+   
+    // 将“m”中的全部元素都添加到HashMap中。    
+    // 该方法被内部的构造HashMap的方法所调用。    
+    private void putAllForCreate(Map<? extends K, ? extends V> m) {    
+        // 利用迭代器将元素逐个添加到HashMap中    
+        for (Iterator<? extends Map.Entry<? extends K, ? extends V>> i = m.entrySet().iterator(); i.hasNext(); ) {    
+            Map.Entry<? extends K, ? extends V> e = i.next();    
+            putForCreate(e.getKey(), e.getValue());    
+        }    
+    }    
+   
+    // 重新调整HashMap的大小，newCapacity是调整后的容量    
+    void resize(int newCapacity) {    
+        Entry[] oldTable = table;    
+        int oldCapacity = oldTable.length;   
+        //如果就容量已经达到了最大值，则不能再扩容，直接返回  
+        if (oldCapacity == MAXIMUM_CAPACITY) {    
+            threshold = Integer.MAX_VALUE;    
+            return;    
+        }    
+   
+        // 新建一个HashMap，将“旧HashMap”的全部元素添加到“新HashMap”中，    
+        // 然后，将“新HashMap”赋值给“旧HashMap”。    
+        Entry[] newTable = new Entry[newCapacity];    
+        transfer(newTable);    
+        table = newTable;    
+        threshold = (int)(newCapacity * loadFactor);    
+    }    
+   
+    // 将HashMap中的全部元素都添加到newTable中    
+    void transfer(Entry[] newTable) {    
+        Entry[] src = table;    
+        int newCapacity = newTable.length;    
+        for (int j = 0; j < src.length; j++) {    
+            Entry<K,V> e = src[j];    
+            if (e != null) {    
+                src[j] = null;    
+                do {    
+                    Entry<K,V> next = e.next;    
+                    int i = indexFor(e.hash, newCapacity);    
+                    e.next = newTable[i];    
+                    newTable[i] = e;    
+                    e = next;    
+                } while (e != null);    
+            }    
+        }    
+    }    
+   
+    // 将"m"的全部元素都添加到HashMap中    
+    public void putAll(Map<? extends K, ? extends V> m) {    
+        // 有效性判断    
+        int numKeysToBeAdded = m.size();    
+        if (numKeysToBeAdded == 0)    
+            return;    
+   
+        // 计算容量是否足够，    
+        // 若“当前阀值容量 < 需要的容量”，则将容量x2。    
+        if (numKeysToBeAdded > threshold) {    
+            int targetCapacity = (int)(numKeysToBeAdded / loadFactor + 1);    
+            if (targetCapacity > MAXIMUM_CAPACITY)    
+                targetCapacity = MAXIMUM_CAPACITY;    
+            int newCapacity = table.length;    
+            while (newCapacity < targetCapacity)    
+                newCapacity <<= 1;    
+            if (newCapacity > table.length)    
+                resize(newCapacity);    
+        }    
+   
+        // 通过迭代器，将“m”中的元素逐个添加到HashMap中。    
+        for (Iterator<? extends Map.Entry<? extends K, ? extends V>> i = m.entrySet().iterator(); i.hasNext(); ) {    
+            Map.Entry<? extends K, ? extends V> e = i.next();    
+            put(e.getKey(), e.getValue());    
+        }    
+    }    
+   
+    // 删除“键为key”元素    
+    public V remove(Object key) {    
+        Entry<K,V> e = removeEntryForKey(key);    
+        return (e == null ? null : e.value);    
+    }    
+   
+    // 删除“键为key”的元素    
+    final Entry<K,V> removeEntryForKey(Object key) {    
+        // 获取哈希值。若key为null，则哈希值为0；否则调用hash()进行计算    
+        int hash = (key == null) ? 0 : hash(key.hashCode());    
+        int i = indexFor(hash, table.length);    
+        Entry<K,V> prev = table[i];    
+        Entry<K,V> e = prev;    
+   
+        // 删除链表中“键为key”的元素    
+        // 本质是“删除单向链表中的节点”    
+        while (e != null) {    
+            Entry<K,V> next = e.next;    
+            Object k;    
+            if (e.hash == hash &&    
+                ((k = e.key) == key || (key != null && key.equals(k)))) {    
+                modCount++;    
+                size--;    
+                if (prev == e)    
+                    table[i] = next;    
+                else   
+                    prev.next = next;    
+                e.recordRemoval(this);    
+                return e;    
+            }    
+            prev = e;    
+            e = next;    
+        }    
+   
+        return e;    
+    }    
+   
+    // 删除“键值对”    
+    final Entry<K,V> removeMapping(Object o) {    
+        if (!(o instanceof Map.Entry))    
+            return null;    
+   
+        Map.Entry<K,V> entry = (Map.Entry<K,V>) o;    
+        Object key = entry.getKey();    
+        int hash = (key == null) ? 0 : hash(key.hashCode());    
+        int i = indexFor(hash, table.length);    
+        Entry<K,V> prev = table[i];    
+        Entry<K,V> e = prev;    
+   
+        // 删除链表中的“键值对e”    
+        // 本质是“删除单向链表中的节点”    
+        while (e != null) {    
+            Entry<K,V> next = e.next;    
+            if (e.hash == hash && e.equals(entry)) {    
+                modCount++;    
+                size--;    
+                if (prev == e)    
+                    table[i] = next;    
+                else   
+                    prev.next = next;    
+                e.recordRemoval(this);    
+                return e;    
+            }    
+            prev = e;    
+            e = next;    
+        }    
+   
+        return e;    
+    }    
+   
+    // 清空HashMap，将所有的元素设为null    
+    public void clear() {    
+        modCount++;    
+        Entry[] tab = table;    
+        for (int i = 0; i < tab.length; i++)    
+            tab[i] = null;    
+        size = 0;    
+    }    
+   
+    // 是否包含“值为value”的元素    
+    public boolean containsValue(Object value) {    
+    // 若“value为null”，则调用containsNullValue()查找    
+    if (value == null)    
+            return containsNullValue();    
+   
+    // 若“value不为null”，则查找HashMap中是否有值为value的节点。    
+    Entry[] tab = table;    
+        for (int i = 0; i < tab.length ; i++)    
+            for (Entry e = tab[i] ; e != null ; e = e.next)    
+                if (value.equals(e.value))    
+                    return true;    
+    return false;    
+    }    
+   
+    // 是否包含null值    
+    private boolean containsNullValue() {    
+    Entry[] tab = table;    
+        for (int i = 0; i < tab.length ; i++)    
+            for (Entry e = tab[i] ; e != null ; e = e.next)    
+                if (e.value == null)    
+                    return true;    
+    return false;    
+    }    
+   
+    // 克隆一个HashMap，并返回Object对象    
+    public Object clone() {    
+        HashMap<K,V> result = null;    
+        try {    
+            result = (HashMap<K,V>)super.clone();    
+        } catch (CloneNotSupportedException e) {    
+            // assert false;    
+        }    
+        result.table = new Entry[table.length];    
+        result.entrySet = null;    
+        result.modCount = 0;    
+        result.size = 0;    
+        result.init();    
+        // 调用putAllForCreate()将全部元素添加到HashMap中    
+        result.putAllForCreate(this);    
+   
+        return result;    
+    }    
+   
+    // Entry是单向链表。    
+    // 它是 “HashMap链式存储法”对应的链表。    
+    // 它实现了Map.Entry 接口，即实现getKey(), getValue(), setValue(V value), equals(Object o), hashCode()这些函数    
+    static class Entry<K,V> implements Map.Entry<K,V> {    
+        final K key;    
+        V value;    
+        // 指向下一个节点    
+        Entry<K,V> next;    
+        final int hash;    
+   
+        // 构造函数。    
+        // 输入参数包括"哈希值(h)", "键(k)", "值(v)", "下一节点(n)"    
+        Entry(int h, K k, V v, Entry<K,V> n) {    
+            value = v;    
+            next = n;    
+            key = k;    
+            hash = h;    
+        }    
+   
+        public final K getKey() {    
+            return key;    
+        }    
+   
+        public final V getValue() {    
+            return value;    
+        }    
+   
+        public final V setValue(V newValue) {    
+            V oldValue = value;    
+            value = newValue;    
+            return oldValue;    
+        }    
+   
+        // 判断两个Entry是否相等    
+        // 若两个Entry的“key”和“value”都相等，则返回true。    
+        // 否则，返回false    
+        public final boolean equals(Object o) {    
+            if (!(o instanceof Map.Entry))    
+                return false;    
+            Map.Entry e = (Map.Entry)o;    
+            Object k1 = getKey();    
+            Object k2 = e.getKey();    
+            if (k1 == k2 || (k1 != null && k1.equals(k2))) {    
+                Object v1 = getValue();    
+                Object v2 = e.getValue();    
+                if (v1 == v2 || (v1 != null && v1.equals(v2)))    
+                    return true;    
+            }    
+            return false;    
+        }    
+   
+        // 实现hashCode()    
+        public final int hashCode() {    
+            return (key==null   ? 0 : key.hashCode()) ^    
+                   (value==null ? 0 : value.hashCode());    
+        }    
+   
+        public final String toString() {    
+            return getKey() + "=" + getValue();    
+        }    
+   
+        // 当向HashMap中添加元素时，绘调用recordAccess()。    
+        // 这里不做任何处理    
+        void recordAccess(HashMap<K,V> m) {    
+        }    
+   
+        // 当从HashMap中删除元素时，绘调用recordRemoval()。    
+        // 这里不做任何处理    
+        void recordRemoval(HashMap<K,V> m) {    
+        }    
+    }    
+   
+    // 新增Entry。将“key-value”插入指定位置，bucketIndex是位置索引。    
+    void addEntry(int hash, K key, V value, int bucketIndex) {    
+        // 保存“bucketIndex”位置的值到“e”中    
+        Entry<K,V> e = table[bucketIndex];    
+        // 设置“bucketIndex”位置的元素为“新Entry”，    
+        // 设置“e”为“新Entry的下一个节点”    
+        table[bucketIndex] = new Entry<K,V>(hash, key, value, e);    
+        // 若HashMap的实际大小 不小于 “阈值”，则调整HashMap的大小    
+        if (size++ >= threshold)    
+            resize(2 * table.length);    
+    }    
+   
+    // 创建Entry。将“key-value”插入指定位置。    
+    void createEntry(int hash, K key, V value, int bucketIndex) {    
+        // 保存“bucketIndex”位置的值到“e”中    
+        Entry<K,V> e = table[bucketIndex];    
+        // 设置“bucketIndex”位置的元素为“新Entry”，    
+        // 设置“e”为“新Entry的下一个节点”    
+        table[bucketIndex] = new Entry<K,V>(hash, key, value, e);    
+        size++;    
+    }    
+   
+    // HashIterator是HashMap迭代器的抽象出来的父类，实现了公共了函数。    
+    // 它包含“key迭代器(KeyIterator)”、“Value迭代器(ValueIterator)”和“Entry迭代器(EntryIterator)”3个子类。    
+    private abstract class HashIterator<E> implements Iterator<E> {    
+        // 下一个元素    
+        Entry<K,V> next;    
+        // expectedModCount用于实现fast-fail机制。    
+        int expectedModCount;    
+        // 当前索引    
+        int index;    
+        // 当前元素    
+        Entry<K,V> current;    
+   
+        HashIterator() {    
+            expectedModCount = modCount;    
+            if (size > 0) { // advance to first entry    
+                Entry[] t = table;    
+                // 将next指向table中第一个不为null的元素。    
+                // 这里利用了index的初始值为0，从0开始依次向后遍历，直到找到不为null的元素就退出循环。    
+                while (index < t.length && (next = t[index++]) == null)    
+                    ;    
+            }    
+        }    
+   
+        public final boolean hasNext() {    
+            return next != null;    
+        }    
+   
+        // 获取下一个元素    
+        final Entry<K,V> nextEntry() {    
+            if (modCount != expectedModCount)    
+                throw new ConcurrentModificationException();    
+            Entry<K,V> e = next;    
+            if (e == null)    
+                throw new NoSuchElementException();    
+   
+            // 注意！！！    
+            // 一个Entry就是一个单向链表    
+            // 若该Entry的下一个节点不为空，就将next指向下一个节点;    
+            // 否则，将next指向下一个链表(也是下一个Entry)的不为null的节点。    
+            if ((next = e.next) == null) {    
+                Entry[] t = table;    
+                while (index < t.length && (next = t[index++]) == null)    
+                    ;    
+            }    
+            current = e;    
+            return e;    
+        }    
+   
+        // 删除当前元素    
+        public void remove() {    
+            if (current == null)    
+                throw new IllegalStateException();    
+            if (modCount != expectedModCount)    
+                throw new ConcurrentModificationException();    
+            Object k = current.key;    
+            current = null;    
+            HashMap.this.removeEntryForKey(k);    
+            expectedModCount = modCount;    
+        }    
+   
+    }    
+   
+    // value的迭代器    
+    private final class ValueIterator extends HashIterator<V> {    
+        public V next() {    
+            return nextEntry().value;    
+        }    
+    }    
+   
+    // key的迭代器    
+    private final class KeyIterator extends HashIterator<K> {    
+        public K next() {    
+            return nextEntry().getKey();    
+        }    
+    }    
+   
+    // Entry的迭代器    
+    private final class EntryIterator extends HashIterator<Map.Entry<K,V>> {    
+        public Map.Entry<K,V> next() {    
+            return nextEntry();    
+        }    
+    }    
+   
+    // 返回一个“key迭代器”    
+    Iterator<K> newKeyIterator()   {    
+        return new KeyIterator();    
+    }    
+    // 返回一个“value迭代器”    
+    Iterator<V> newValueIterator()   {    
+        return new ValueIterator();    
+    }    
+    // 返回一个“entry迭代器”    
+    Iterator<Map.Entry<K,V>> newEntryIterator()   {    
+        return new EntryIterator();    
+    }    
+   
+    // HashMap的Entry对应的集合    
+    private transient Set<Map.Entry<K,V>> entrySet = null;    
+   
+    // 返回“key的集合”，实际上返回一个“KeySet对象”    
+    public Set<K> keySet() {    
+        Set<K> ks = keySet;    
+        return (ks != null ? ks : (keySet = new KeySet()));    
+    }    
+   
+    // Key对应的集合    
+    // KeySet继承于AbstractSet，说明该集合中没有重复的Key。    
+    private final class KeySet extends AbstractSet<K> {    
+        public Iterator<K> iterator() {    
+            return newKeyIterator();    
+        }    
+        public int size() {    
+            return size;    
+        }    
+        public boolean contains(Object o) {    
+            return containsKey(o);    
+        }    
+        public boolean remove(Object o) {    
+            return HashMap.this.removeEntryForKey(o) != null;    
+        }    
+        public void clear() {    
+            HashMap.this.clear();    
+        }    
+    }    
+   
+    // 返回“value集合”，实际上返回的是一个Values对象    
+    public Collection<V> values() {    
+        Collection<V> vs = values;    
+        return (vs != null ? vs : (values = new Values()));    
+    }    
+   
+    // “value集合”    
+    // Values继承于AbstractCollection，不同于“KeySet继承于AbstractSet”，    
+    // Values中的元素能够重复。因为不同的key可以指向相同的value。    
+    private final class Values extends AbstractCollection<V> {    
+        public Iterator<V> iterator() {    
+            return newValueIterator();    
+        }    
+        public int size() {    
+            return size;    
+        }    
+        public boolean contains(Object o) {    
+            return containsValue(o);    
+        }    
+        public void clear() {    
+            HashMap.this.clear();    
+        }    
+    }    
+   
+    // 返回“HashMap的Entry集合”    
+    public Set<Map.Entry<K,V>> entrySet() {    
+        return entrySet0();    
+    }    
+   
+    // 返回“HashMap的Entry集合”，它实际是返回一个EntrySet对象    
+    private Set<Map.Entry<K,V>> entrySet0() {    
+        Set<Map.Entry<K,V>> es = entrySet;    
+        return es != null ? es : (entrySet = new EntrySet());    
+    }    
+   
+    // EntrySet对应的集合    
+    // EntrySet继承于AbstractSet，说明该集合中没有重复的EntrySet。    
+    private final class EntrySet extends AbstractSet<Map.Entry<K,V>> {    
+        public Iterator<Map.Entry<K,V>> iterator() {    
+            return newEntryIterator();    
+        }    
+        public boolean contains(Object o) {    
+            if (!(o instanceof Map.Entry))    
+                return false;    
+            Map.Entry<K,V> e = (Map.Entry<K,V>) o;    
+            Entry<K,V> candidate = getEntry(e.getKey());    
+            return candidate != null && candidate.equals(e);    
+        }    
+        public boolean remove(Object o) {    
+            return removeMapping(o) != null;    
+        }    
+        public int size() {    
+            return size;    
+        }    
+        public void clear() {    
+            HashMap.this.clear();    
+        }    
+    }    
+   
+    // java.io.Serializable的写入函数    
+    // 将HashMap的“总的容量，实际容量，所有的Entry”都写入到输出流中    
+    private void writeObject(java.io.ObjectOutputStream s)    
+        throws IOException    
+    {    
+        Iterator<Map.Entry<K,V>> i =    
+            (size > 0) ? entrySet0().iterator() : null;    
+   
+        // Write out the threshold, loadfactor, and any hidden stuff    
+        s.defaultWriteObject();    
+   
+        // Write out number of buckets    
+        s.writeInt(table.length);    
+   
+        // Write out size (number of Mappings)    
+        s.writeInt(size);    
+   
+        // Write out keys and values (alternating)    
+        if (i != null) {    
+            while (i.hasNext()) {    
+            Map.Entry<K,V> e = i.next();    
+            s.writeObject(e.getKey());    
+            s.writeObject(e.getValue());    
+            }    
+        }    
+    }    
+   
+   
+    private static final long serialVersionUID = 362498820763181265L;    
+   
+    // java.io.Serializable的读取函数：根据写入方式读出    
+    // 将HashMap的“总的容量，实际容量，所有的Entry”依次读出    
+    private void readObject(java.io.ObjectInputStream s)    
+         throws IOException, ClassNotFoundException    
+    {    
+        // Read in the threshold, loadfactor, and any hidden stuff    
+        s.defaultReadObject();    
+   
+        // Read in number of buckets and allocate the bucket array;    
+        int numBuckets = s.readInt();    
+        table = new Entry[numBuckets];    
+   
+        init();  // Give subclass a chance to do its thing.    
+   
+        // Read in size (number of Mappings)    
+        int size = s.readInt();    
+   
+        // Read the keys and values, and put the mappings in the HashMap    
+        for (int i=0; i<size; i++) {    
+            K key = (K) s.readObject();    
+            V value = (V) s.readObject();    
+            putForCreate(key, value);    
+        }    
+    }    
+   
+    // 返回“HashMap总的容量”    
+    int   capacity()     { return table.length; }    
+    // 返回“HashMap的加载因子”    
+    float loadFactor()   { return loadFactor;   }    
+}   
+```
+
+\###几点总结 1、首先要清楚HashMap的存储结构，如下图所示：
+
+[![img](https://camo.githubusercontent.com/8565fd90daccb7f62375f2164a5eaf5b88b6e2b1/687474703a2f2f696d672e626c6f672e6373646e2e6e65742f32303134303730313139313430333736343f77617465726d61726b2f322f746578742f6148523063446f764c324a736232637559334e6b626935755a585176626e4e665932396b5a513d3d2f666f6e742f3561364c354c32542f666f6e7473697a652f3430302f66696c6c2f49304a42516b46434d413d3d2f646973736f6c76652f37302f677261766974792f536f75746845617374)](https://camo.githubusercontent.com/8565fd90daccb7f62375f2164a5eaf5b88b6e2b1/687474703a2f2f696d672e626c6f672e6373646e2e6e65742f32303134303730313139313430333736343f77617465726d61726b2f322f746578742f6148523063446f764c324a736232637559334e6b626935755a585176626e4e665932396b5a513d3d2f666f6e742f3561364c354c32542f666f6e7473697a652f3430302f66696c6c2f49304a42516b46434d413d3d2f646973736f6c76652f37302f677261766974792f536f75746845617374)
+
+图中，紫色部分即代表哈希表，也称为哈希数组，数组的每个元素都是一个单链表的头节点，链表是用来解决冲突的，如果不同的key映射到了数组的同一位置处，就将其放入单链表中。
+
+2、首先看链表中节点的数据结构：
+
+```
+// Entry是单向链表。    
+// 它是 “HashMap链式存储法”对应的链表。    
+// 它实现了Map.Entry 接口，即实现getKey(), getValue(), setValue(V value), equals(Object o), hashCode()这些函数    
+static class Entry<K,V> implements Map.Entry<K,V> {    
+    final K key;    
+    V value;    
+    // 指向下一个节点    
+    Entry<K,V> next;    
+    final int hash;    
+  
+    // 构造函数。    
+    // 输入参数包括"哈希值(h)", "键(k)", "值(v)", "下一节点(n)"    
+    Entry(int h, K k, V v, Entry<K,V> n) {    
+        value = v;    
+        next = n;    
+        key = k;    
+        hash = h;    
+    }    
+  
+    public final K getKey() {    
+        return key;    
+    }    
+  
+    public final V getValue() {    
+        return value;    
+    }    
+  
+    public final V setValue(V newValue) {    
+        V oldValue = value;    
+        value = newValue;    
+        return oldValue;    
+    }    
+  
+    // 判断两个Entry是否相等    
+    // 若两个Entry的“key”和“value”都相等，则返回true。    
+    // 否则，返回false    
+    public final boolean equals(Object o) {    
+        if (!(o instanceof Map.Entry))    
+            return false;    
+        Map.Entry e = (Map.Entry)o;    
+        Object k1 = getKey();    
+        Object k2 = e.getKey();    
+        if (k1 == k2 || (k1 != null && k1.equals(k2))) {    
+            Object v1 = getValue();    
+            Object v2 = e.getValue();    
+            if (v1 == v2 || (v1 != null && v1.equals(v2)))    
+                return true;    
+        }    
+        return false;    
+    }    
+  
+    // 实现hashCode()    
+    public final int hashCode() {    
+        return (key==null   ? 0 : key.hashCode()) ^    
+               (value==null ? 0 : value.hashCode());    
+    }    
+  
+    public final String toString() {    
+        return getKey() + "=" + getValue();    
+    }    
+  
+    // 当向HashMap中添加元素时，绘调用recordAccess()。    
+    // 这里不做任何处理    
+    void recordAccess(HashMap<K,V> m) {    
+    }    
+  
+    // 当从HashMap中删除元素时，绘调用recordRemoval()。    
+    // 这里不做任何处理    
+    void recordRemoval(HashMap<K,V> m) {    
+    }    
+}    
+```
+
+它的结构元素除了key、value、hash外，还有next，next指向下一个节点。另外，这里覆写了equals和hashCode方法来保证键值对的独一无二。
+
+3、HashMap共有四个构造方法。构造方法中提到了两个很重要的参数：初始容量和加载因子。这两个参数是影响HashMap性能的重要参数，其中容量表示哈希表中槽的数量（即哈希数组的长度），初始容量是创建哈希表时的容量（从构造函数中可以看出，如果不指明，则默认为16），加载因子是哈希表在其容量自动增加之前可以达到多满的一种尺度，当哈希表中的条目数超出了加载因子与当前容量的乘积时，则要对该哈希表进行 resize 操作（即扩容）。
+
+下面说下加载因子，如果加载因子越大，对空间的利用更充分，但是查找效率会降低（链表长度会越来越长）；如果加载因子太小，那么表中的数据将过于稀疏（很多空间还没用，就开始扩容了），对空间造成严重浪费。如果我们在构造方法中不指定，则系统默认加载因子为0.75，这是一个比较理想的值，一般情况下我们是无需修改的。
+
+另外，无论我们指定的容量为多少，构造方法都会将实际容量设为不小于指定容量的2的次方的一个数，且最大值不能超过2的30次方
+
+4、HashMap中key和value都允许为null。
+
+5、要重点分析下HashMap中用的最多的两个方法put和get。先从比较简单的get方法着手，源码如下：
+
+```
+// 获取key对应的value    
+public V get(Object key) {    
+    if (key == null)    
+        return getForNullKey();    
+    // 获取key的hash值    
+    int hash = hash(key.hashCode());    
+    // 在“该hash值对应的链表”上查找“键值等于key”的元素    
+    for (Entry<K,V> e = table[indexFor(hash, table.length)];    
+         e != null;    
+         e = e.next) {    
+        Object k;    
+/判断key是否相同  
+        if (e.hash == hash && ((k = e.key) == key || key.equals(k)))    
+            return e.value;    
+    }  
+没找到则返回null  
+    return null;    
+}    
+  
+// 获取“key为null”的元素的值    
+// HashMap将“key为null”的元素存储在table[0]位置，但不一定是该链表的第一个位置！    
+private V getForNullKey() {    
+    for (Entry<K,V> e = table[0]; e != null; e = e.next) {    
+        if (e.key == null)    
+            return e.value;    
+    }    
+    return null;    
+}    
+```
+
+首先，如果key为null，则直接从哈希表的第一个位置table[0]对应的链表上查找。记住，key为null的键值对永远都放在以table[0]为头结点的链表中，当然不一定是存放在头结点table[0]中。
+
+如果key不为null，则先求的key的hash值，根据hash值找到在table中的索引，在该索引对应的单链表中查找是否有键值对的key与目标key相等，有就返回对应的value，没有则返回null。
+
+put方法稍微复杂些，代码如下：
+
+```
+  // 将“key-value”添加到HashMap中    
+  public V put(K key, V value) {    
+      // 若“key为null”，则将该键值对添加到table[0]中。    
+      if (key == null)    
+          return putForNullKey(value);    
+      // 若“key不为null”，则计算该key的哈希值，然后将其添加到该哈希值对应的链表中。    
+      int hash = hash(key.hashCode());    
+      int i = indexFor(hash, table.length);    
+      for (Entry<K,V> e = table[i]; e != null; e = e.next) {    
+          Object k;    
+          // 若“该key”对应的键值对已经存在，则用新的value取代旧的value。然后退出！    
+          if (e.hash == hash && ((k = e.key) == key || key.equals(k))) {    
+              V oldValue = e.value;    
+              e.value = value;    
+              e.recordAccess(this);    
+              return oldValue;    
+          }    
+      }    
+  
+      // 若“该key”对应的键值对不存在，则将“key-value”添加到table中    
+      modCount++;  
+//将key-value添加到table[i]处  
+      addEntry(hash, key, value, i);    
+      return null;    
+  }   
+```
+
+如果key为null，则将其添加到table[0]对应的链表中，putForNullKey的源码如下：
+
+```
+// putForNullKey()的作用是将“key为null”键值对添加到table[0]位置    
+private V putForNullKey(V value) {    
+    for (Entry<K,V> e = table[0]; e != null; e = e.next) {    
+        if (e.key == null) {    
+            V oldValue = e.value;    
+            e.value = value;    
+            e.recordAccess(this);    
+            return oldValue;    
+        }    
+    }    
+    // 如果没有存在key为null的键值对，则直接题阿见到table[0]处!    
+    modCount++;    
+    addEntry(0, null, value, 0);    
+    return null;    
+}   
+```
+
+如果key不为null，则同样先求出key的hash值，根据hash值得出在table中的索引，而后遍历对应的单链表，如果单链表中存在与目标key相等的键值对，则将新的value覆盖旧的value，比将旧的value返回，如果找不到与目标key相等的键值对，或者该单链表为空，则将该键值对插入到改单链表的头结点位置（每次新插入的节点都是放在头结点的位置），该操作是有addEntry方法实现的，它的源码如下：
+
+```
+// 新增Entry。将“key-value”插入指定位置，bucketIndex是位置索引。    
+void addEntry(int hash, K key, V value, int bucketIndex) {    
+    // 保存“bucketIndex”位置的值到“e”中    
+    Entry<K,V> e = table[bucketIndex];    
+    // 设置“bucketIndex”位置的元素为“新Entry”，    
+    // 设置“e”为“新Entry的下一个节点”    
+    table[bucketIndex] = new Entry<K,V>(hash, key, value, e);    
+    // 若HashMap的实际大小 不小于 “阈值”，则调整HashMap的大小    
+    if (size++ >= threshold)    
+        resize(2 * table.length);    
+}    
+```
+
+注意这里倒数第三行的构造方法，将key-value键值对赋给table[bucketIndex]，并将其next指向元素e，这便将key-value放到了头结点中，并将之前的头结点接在了它的后面。该方法也说明，每次put键值对的时候，总是将新的该键值对放在table[bucketIndex]处（即头结点处）。
+
+两外注意最后两行代码，每次加入键值对时，都要判断当前已用的槽的数目是否大于等于阀值（容量*加载因子），如果大于等于，则进行扩容，将容量扩为原来容量的2倍。
+
+6、关于扩容。上面我们看到了扩容的方法，resize方法，它的源码如下：
+
+```
+// 重新调整HashMap的大小，newCapacity是调整后的单位    
+void resize(int newCapacity) {    
+    Entry[] oldTable = table;    
+    int oldCapacity = oldTable.length;    
+    if (oldCapacity == MAXIMUM_CAPACITY) {    
+        threshold = Integer.MAX_VALUE;    
+        return;    
+    }    
+  
+    // 新建一个HashMap，将“旧HashMap”的全部元素添加到“新HashMap”中，    
+    // 然后，将“新HashMap”赋值给“旧HashMap”。    
+    Entry[] newTable = new Entry[newCapacity];    
+    transfer(newTable);    
+    table = newTable;    
+    threshold = (int)(newCapacity * loadFactor);    
+}    
+```
+
+很明显，是新建了一个HashMap的底层数组，而后调用transfer方法，将就HashMap的全部元素添加到新的HashMap中（要重新计算元素在新的数组中的索引位置）。transfer方法的源码如下：
+
+```
+// 将HashMap中的全部元素都添加到newTable中    
+void transfer(Entry[] newTable) {    
+    Entry[] src = table;    
+    int newCapacity = newTable.length;    
+    for (int j = 0; j < src.length; j++) {    
+        Entry<K,V> e = src[j];    
+        if (e != null) {    
+            src[j] = null;    
+            do {    
+                Entry<K,V> next = e.next;    
+                int i = indexFor(e.hash, newCapacity);    
+                e.next = newTable[i];    
+                newTable[i] = e;    
+                e = next;    
+            } while (e != null);    
+        }    
+    }    
+}    
+```
+
+很明显，扩容是一个相当耗时的操作，因为它需要重新计算这些元素在新的数组中的位置并进行复制处理。因此，我们在用HashMap的时，最好能提前预估下HashMap中元素的个数，这样有助于提高HashMap的性能。
+
+7、注意containsKey方法和containsValue方法。前者直接可以通过key的哈希值将搜索范围定位到指定索引对应的链表，而后者要对哈希数组的每个链表进行搜索。
+
+8、我们重点来分析下求hash值和索引值的方法，这两个方法便是HashMap设计的最为核心的部分，二者结合能保证哈希表中的元素尽可能均匀地散列。
+
+计算哈希值的方法如下：
+
+```
+static int hash(int h) {  
+        h ^= (h >>> 20) ^ (h >>> 12);  
+        return h ^ (h >>> 7) ^ (h >>> 4);  
+    }  
+```
+
+它只是一个数学公式，IDK这样设计对hash值的计算，自然有它的好处，至于为什么这样设计，我们这里不去追究，只要明白一点，用的位的操作使hash值的计算效率很高。
+
+由hash值找到对应索引的方法如下：
+
+```
+static int indexFor(int h, int length) {  
+        return h & (length-1);  
+    }  
+```
+
+这个我们要重点说下，我们一般对哈希表的散列很自然地会想到用hash值对length取模（即除法散列法），Hashtable中也是这样实现的，这种方法基本能保证元素在哈希表中散列的比较均匀，但取模会用到除法运算，效率很低，HashMap中则通过h&(length-1)的方法来代替取模，同样实现了均匀的散列，但效率要高很多，这也是HashMap对Hashtable的一个改进。
+
+接下来，我们分析下为什么哈希表的容量一定要是2的整数次幂。首先，length为2的整数次幂的话，h&(length-1)就相当于对length取模，这样便保证了散列的均匀，同时也提升了效率；其次，length为2的整数次幂的话，为偶数，这样length-1为奇数，奇数的最后一位是1，这样便保证了h&(length-1)的最后一位可能为0，也可能为1（这取决于h的值），即与后的结果可能为偶数，也可能为奇数，这样便可以保证散列的均匀性，而如果length为奇数的话，很明显length-1为偶数，它的最后一位是0，这样h&(length-1)的最后一位肯定为0，即只能为偶数，这样任何hash值都只会被散列到数组的偶数下标位置上，这便浪费了近一半的空间，因此，length取2的整数次幂，是为了使不同hash值发生碰撞的概率较小，这样就能使元素在哈希表中均匀地散列。
+
+
 
 
 
@@ -125,6 +1152,35 @@
   * 自旋锁:锁住同步资源失败，不阻塞线程。
   * 死锁：当前线程拥有其他线程需要的资源，当前线程等待其他线程已拥有的资源，都不放弃自己拥有的资源.
 
+* ## 守护线程与阻塞线程的四种情况
+
+  > Java中有两类线程：User Thread(用户线程)、Daemon Thread(守护线程)
+  >
+  > 用户线程即运行在前台的线程，而守护线程是运行在后台的线程。 守护线程作用是为其他前台线程的运行提供便利服务，而且仅在普通、非守护线程仍然运行时才需要，比如垃圾回收线程就是一个守护线程。当VM检测仅剩一个守护线程，而用户线程都已经退出运行时，VM就会退出，因为如果没有了守护者，也就没有继续运行程序的必要了。如果有非守护线程仍然活着，VM就不会退出。
+  >
+  > 守护线程并非只有虚拟机内部提供，用户在编写程序时也可以自己设置守护线程。用户可以用Thread的setDaemon(true)方法设置当前线程为守护线程。
+  >
+  > 虽然守护线程可能非常有用，但必须小心确保其它所有非守护线程消亡时，不会由于它的终止而产生任何危害。因为你不可能知道在所有的用户线程退出运行前，守护线程是否已经完成了预期的服务任务。一旦所有的用户线程退出了，虚拟机也就退出运行了。因此，不要再守护线程中执行业务逻辑操作(比如对数据的读写等)。
+  >
+  > 还有几点：
+  >
+  > 1. setDaemon(true)必须在调用线程的start()方法之前设置，否则会跑出IllegalThreadStateException异常。
+  > 2. 在守护线程中产生的新线程也是守护线程
+  > 3. 不要认为所有的应用都可以分配给守护线程来进行服务，比如读写操作或者计算逻辑。
+  >
+  > \##线程阻塞
+  >
+  > 线程可以阻塞于四种状态：
+  >
+  > 1. 当线程执行Thread.sleep()时，它一直阻塞到指定的毫秒时间之后，或者阻塞被另一个线程打断
+  > 2. 当线程碰到一条wait()语句时，它会一直阻塞到接到通知(notify())、被中断或经过了指定毫秒 时间为止(若指定了超时值的话)
+  > 3. 线程阻塞与不同的I/O的方式有多种。常见的一种方式是InputStream的read()方法，该方法一直阻塞到从流中读取一个字节的数据为止，它可以无限阻塞，因此不能指定超时时间
+  > 4. 线程也可以阻塞等待获取某个对象锁的排它性访问权限(即等待获得synchronized语句必须的锁时阻塞)
+  >
+  > 并非所有的阻塞状态都是可中断的，以上阻塞状态的前两种可以被中断，后两种不会对中断做出反应。
+
+  
+
 * #### synchronized关键字
 
   > 1、当线程视图访问同步代码时，必须得到对象锁，退出或抛出异常时必须释放锁。
@@ -142,7 +1198,7 @@
   > ​	4、代码块同步 `synchronized(Test.class){ //TODO}` 同三
   >
   > ​	5、代码块同步 `synchronized(o) {}` 这里的 o 可以时任何object对象或数组，谁拥有o这个锁，谁就就够操作该块程序代码。
-  
+
 * 线程可见
 
   * 1、jvm主内存与工作内存
@@ -219,15 +1275,398 @@
 
   * 
 
-* 
+## JVM
+
+###  基础知识
+
+**内存模型以及分区，需要详细到每个区放什么。**
+
+http://blog.csdn.net/ns_code/article/details/17565503
+
+JVM所管理的内存分为以下几个运行时数据区：程序计数器、Java虚拟机栈、本地方法栈、Java堆、方法区。
+
+[![img](https://camo.githubusercontent.com/6d3533c08ec53b6b8e23c73d42793af33272f041/687474703a2f2f696d672e626c6f672e6373646e2e6e65742f3230313331323236313531373434323530)](https://camo.githubusercontent.com/6d3533c08ec53b6b8e23c73d42793af33272f041/687474703a2f2f696d672e626c6f672e6373646e2e6e65742f3230313331323236313531373434323530)
+
+程序计数器(Program Counter Register)
+
+一块较小的内存空间，它是当前线程所执行的字节码的行号指示器，字节码解释器工作时通过改变该计数器的值来选择下一条需要执行的字节码指令，分支、跳转、循环等基础功能都要依赖它来实现。每条线程都有一个独立的的程序计数器，各线程间的计数器互不影响，因此该区域是线程私有的。
+
+当线程在执行一个Java方法时，该计数器记录的是正在执行的虚拟机字节码指令的地址，当线程在执行的是Native方法（调用本地操作系统方法）时，该计数器的值为空。另外，该内存区域是唯一一个在Java虚拟机规范中么有规定任何OOM（内存溢出：OutOfMemoryError）情况的区域。
+
+Java虚拟机栈（Java Virtual Machine Stacks）
+
+该区域也是线程私有的，它的生命周期也与线程相同。虚拟机栈描述的是Java方法执行的内存模型：每个方法被执行的时候都会同时创建一个栈帧，栈它是用于支持续虚拟机进行方法调用和方法执行的数据结构。对于执行引擎来讲，活动线程中，只有栈顶的栈帧是有效的，称为当前栈帧，这个栈帧所关联的方法称为当前方法，执行引擎所运行的所有字节码指令都只针对当前栈帧进行操作。栈帧用于存储局部变量表、操作数栈、动态链接、方法返回地址和一些额外的附加信息。在编译程序代码时，栈帧中需要多大的局部变量表、多深的操作数栈都已经完全确定了，并且写入了方法表的Code属性之中。因此，一个栈帧需要分配多少内存，不会受到程序运行期变量数据的影响，而仅仅取决于具体的虚拟机实现。
+
+本地方法栈（Native Method Stacks）
+
+该区域与虚拟机栈所发挥的作用非常相似，只是虚拟机栈为虚拟机执行Java方法服务，而本地方法栈则为使用到的本地操作系统（Native）方法服务。
+
+Java堆（Java Heap）
+
+Java Heap是Java虚拟机所管理的内存中最大的一块，它是所有线程共享的一块内存区域。几乎所有的对象实例和数组都在这类分配内存。Java Heap是垃圾收集器管理的主要区域，因此很多时候也被称为“GC堆”。
+
+根据Java虚拟机规范的规定，Java堆可以处在物理上不连续的内存空间中，只要逻辑上是连续的即可。如果在堆中没有内存可分配时，并且堆也无法扩展时，将会抛出OutOfMemoryError异常。
+
+方法区（Method Area）
+
+方法区也是各个线程共享的内存区域，它用于存储已经被虚拟机加载的类信息、常量、静态变量、即时编译器编译后的代码等数据。方法区域又被称为“永久代”，但这仅仅对于Sun HotSpot来讲，JRockit和IBM J9虚拟机中并不存在永久代的概念。Java虚拟机规范把方法区描述为Java堆的一个逻辑部分，而且它和Java Heap一样不需要连续的内存，可以选择固定大小或可扩展，另外，虚拟机规范允许该区域可以选择不实现垃圾回收。相对而言，垃圾收集行为在这个区域比较少出现。该区域的内存回收目标主要针是对废弃常量的和无用类的回收。运行时常量池是方法区的一部分，Class文件中除了有类的版本、字段、方法、接口等描述信息外，还有一项信息是常量池（Class文件常量池），用于存放编译器生成的各种字面量和符号引用，这部分内容将在类加载后存放到方法区的运行时常量池中。运行时常量池相对于Class文件常量池的另一个重要特征是具备动态性，Java语言并不要求常量一定只能在编译期产生，也就是并非预置入Class文件中的常量池的内容才能进入方法区的运行时常量池，运行期间也可能将新的常量放入池中，这种特性被开发人员利用比较多的是String类的intern（）方法。
+
+根据Java虚拟机规范的规定，当方法区无法满足内存分配需求时，将抛出OutOfMemoryError异常。
+
+**内存泄漏和内存溢出的差别**
+
+内存泄露是指分配出去的内存没有被回收回来，由于失去了对该内存区域的控制，因而造成了资源的浪费。Java中一般不会产生内存泄露，因为有垃圾回收器自动回收垃圾，但这也不绝对，当我们new了对象，并保存了其引用，但是后面一直没用它，而垃圾回收器又不会去回收它，这边会造成内存泄露，
+
+内存溢出是指程序所需要的内存超出了系统所能分配的内存（包括动态扩展）的上限。
+
+**类型擦除**
+
+http://blog.csdn.net/ns_code/article/details/18011009
+
+Java语言在JDK1.5之后引入的泛型实际上只在程序源码中存在，在编译后的字节码文件中，就已经被替换为了原来的原生类型，并且在相应的地方插入了强制转型代码，因此对于运行期的Java语言来说，`ArrayList<String>`和`ArrayList<Integer>`就是同一个类。所以泛型技术实际上是Java语言的一颗语法糖，Java语言中的泛型实现方法称为类型擦除，基于这种方法实现的泛型被称为伪泛型。
+
+下面是一段简单的Java泛型代码：
+
+```
+Map<Integer,String> map = new HashMap<Integer,String>();  
+map.put(1,"No.1");  
+map.put(2,"No.2");  
+System.out.println(map.get(1));  
+System.out.println(map.get(2));  
+```
+
+将这段Java代码编译成Class文件，然后再用字节码反编译工具进行反编译后，将会发现泛型都变回了原生类型，如下面的代码所示：
+
+```
+Map map = new HashMap();  
+map.put(1,"No.1");  
+map.put(2,"No.2");  
+System.out.println((String)map.get(1));  
+System.out.println((String)map.get(2));  
+```
+
+为了更详细地说明类型擦除，再看如下代码：
+
+```
+import java.util.List;  
+public class FanxingTest{  
+    public void method(List<String> list){  
+        System.out.println("List String");  
+    }  
+    public void method(List<Integer> list){  
+        System.out.println("List Int");  
+    }  
+}  
+```
+
+当我用Javac编译器编译这段代码时，报出了如下错误：
+
+```
+FanxingTest.java:3: 名称冲突：method(java.util.List<java.lang.String>) 和 method
+
+(java.util.List<java.lang.Integer>) 具有相同疑符
+
+public void method(List<String> list){
+
+^
+
+FanxingTest.java:6: 名称冲突：method(java.util.List<java.lang.Integer>) 和 metho
+
+d(java.util.List<java.lang.String>) 具有相同疑符
+
+public void method(List<Integer> list){
+
+^
+```
+
+2 错误
+
+这是因为泛型List和List编译后都被擦除了，变成了一样的原生类型List，擦除动作导致这两个方法的特征签名变得一模一样，在Class类文件结构一文中讲过，Class文件中不能存在特征签名相同的方法。
+
+把以上代码修改如下：
+
+```
+import java.util.List;  
+public class FanxingTest{  
+    public int method(List<String> list){  
+        System.out.println("List String");  
+        return 1;  
+    }  
+    public boolean method(List<Integer> list){  
+        System.out.println("List Int");  
+        return true;  
+    }  
+}  
+```
+
+发现这时编译可以通过了（注意：Java语言中true和1没有关联，二者属于不同的类型，不能相互转换，不存在C语言中整数值非零即真的情况）。两个不同类型的返回值的加入，使得方法的重载成功了。这是为什么呢？
+
+```
+我们知道，Java代码中的方法特征签名只包括了方法名称、参数顺序和参数类型，并不包括方法的返回值，因此方法的返回值并不参与重载方法的选择，这样看来为重载方法加入返回值貌似是多余的。对于重载方法的选择来说，这确实是多余的，但我们现在要解决的问题是让上述代码能通过编译，让两个重载方法能够合理地共存于同一个Class文件之中，这就要看字节码的方法特征签名，它不仅包括了Java代码中方法特征签名中所包含的那些信息，还包括方法返回值及受查异常表。为两个重载方法加入不同的返回值后，因为有了不同的字节码特征签名，它们便可以共存于一个Class文件之中。
+```
+
+**堆里面的分区：Eden，survival from to，老年代，各自的特点。**
+
+**对象创建方法，对象的内存分配，对象的访问定位。**
+
+对内存分配情况分析最常见的示例便是对象实例化:
+
+```
+Object obj = new Object();
+```
+
+这段代码的执行会涉及java栈、Java堆、方法区三个最重要的内存区域。假设该语句出现在方法体中，及时对JVM虚拟机不了解的Java使用这，应该也知道obj会作为引用类型（reference）的数据保存在Java栈的本地变量表中，而会在Java堆中保存该引用的实例化对象，但可能并不知道，Java堆中还必须包含能查找到此对象类型数据的地址信息（如对象类型、父类、实现的接口、方法等），这些类型数据则保存在方法区中。
+
+另外，由于reference类型在Java虚拟机规范里面只规定了一个指向对象的引用，并没有定义这个引用应该通过哪种方式去定位，以及访问到Java堆中的对象的具体位置，因此不同虚拟机实现的对象访问方式会有所不同，主流的访问方式有两种：使用句柄池和直接使用指针。
+
+**GC的两种判定方法：引用计数与引用链。**
+
+引用计数方式最基本的形态就是让每个被管理的对象与一个引用计数器关联在一起，该计数器记录着该对象当前被引用的次数，每当创建一个新的引用指向该对象时其计数器就加1，每当指向该对象的引用失效时计数器就减1。当该计数器的值降到0就认为对象死亡。
+
+Java的内存回收机制可以形象地理解为在堆空间中引入了重力场，已经加载的类的静态变量和处于活动线程的堆栈空间的变量是这个空间的牵引对象。这里牵引对象是指按照Java语言规范，即便没有其它对象保持对它的引用也不能够被回收的对象，即Java内存空间中的本原对象。当然类可能被去加载，活动线程的堆栈也是不断变化的，牵引对象的集合也是不断变化的。对于堆空间中的任何一个对象，如果存在一条或者多条从某个或者某几个牵引对象到该对象的引用链，则就是可达对象，可以形象地理解为从牵引对象伸出的引用链将其拉住，避免掉到回收池中。
+
+**GC的三种收集方法：标记清除、标记整理、复制算法的原理与特点，分别用在什么地方，如果让你优化收集方法，有什么思路？**
+
+标记清除算法是最基础的收集算法，其他收集算法都是基于这种思想。标记清除算法分为“标记”和“清除”两个阶段：首先标记出需要回收的对象，标记完成之后统一清除对象。它的主要缺点：①.标记和清除过程效率不高 。②.标记清除之后会产生大量不连续的内存碎片。
+
+标记整理，标记操作和“标记-清除”算法一致，后续操作不只是直接清理对象，而是在清理无用对象完成后让所有存活的对象都向一端移动，并更新引用其对象的指针。主要缺点：在标记-清除的基础上还需进行对象的移动，成本相对较高，好处则是不会产生内存碎片。
+
+复制算法，它将可用内存容量划分为大小相等的两块，每次只使用其中的一块。当这一块用完之后，就将还存活的对象复制到另外一块上面，然后在把已使用过的内存空间一次理掉。这样使得每次都是对其中的一块进行内存回收，不会产生碎片等情况，只要移动堆订的指针，按顺序分配内存即可，实现简单，运行高效。主要缺点：内存缩小为原来的一半。
+
+**Minor GC与Full GC分别在什么时候发生？**
+
+Minor GC：通常是指对新生代的回收。指发生在新生代的垃圾收集动作，因为 Java 对象大多都具备朝生夕灭的特性，所以 Minor GC 非常频繁，一般回收速度也比较快
+
+Major GC：通常是指对年老代的回收。
+
+Full GC：Major GC除并发gc外均需对整个堆进行扫描和回收。指发生在老年代的 GC，出现了 Major GC，经常会伴随至少一次的 Minor GC（但非绝对的，在 ParallelScavenge 收集器的收集策略里就有直接进行 Major GC 的策略选择过程） 。MajorGC 的速度一般会比 Minor GC 慢 10倍以上。
+
+**几种常用的内存调试工具：jmap、jstack、jconsole。**
+
+jmap（linux下特有，也是很常用的一个命令）观察运行中的jvm物理内存的占用情况。 参数如下： -heap：打印jvm heap的情况 -histo：打印jvm heap的直方图。其输出信息包括类名，对象数量，对象占用大小。 -histo：live ：同上，但是只答应存活对象的情况 -permstat：打印permanent generation heap情况 jstack（linux下特有）可以观察到jvm中当前所有线程的运行情况和线程当前状态 jconsole一个图形化界面，可以观察到java进程的gc，class，内存等信息 jstat最后要重点介绍下这个命令。这是jdk命令中比较重要，也是相当实用的一个命令，可以观察到classloader，compiler，gc相关信息 具体参数如下： -class：统计class loader行为信息 -compile：统计编译行为信息 -gc：统计jdk gc时heap信息 -gccapacity：统计不同的generations（不知道怎么翻译好，包括新生区，老年区，permanent区）相应的heap容量情况 -gccause：统计gc的情况，（同-gcutil）和引起gc的事件 -gcnew：统计gc时，新生代的情况 -gcnewcapacity：统计gc时，新生代heap容量 -gcold：统计gc时，老年区的情况 -gcoldcapacity：统计gc时，老年区heap容量 -gcpermcapacity：统计gc时，permanent区heap容量 -gcutil：统计gc时，heap情况 -printcompilation：不知道干什么的，一直没用过。
+
+**类加载的五个过程：加载、验证、准备、解析、初始化。**
+
+类加载过程
+
+类从被加载到虚拟机内存中开始，到卸载出内存为止，它的整个生命周期包括加载、验证、准备、解析、初始化、使用、卸载。
+
+其中类加载的过程包括了加载、验证、准备、解析、初始化五个阶段。在这五个阶段中，加载、验证、准备和初始化这四个阶段发生的顺序是确定的，而解析阶段则不一定，它在某些情况下可以在初始化阶段之后开始，这是为了支持Java语言的运行时绑定（也成为动态绑定或晚期绑定）。另外注意这里的几个阶段是按顺序开始，而不是按顺序进行或完成，因为这些阶段通常都是互相交叉地混合进行的，通常在一个阶段执行的过程中调用或激活另一个阶段。
+
+这里简要说明下Java中的绑定：绑定指的是把一个方法的调用与方法所在的类(方法主体)关联起来，对java来说，绑定分为静态绑定和动态绑定：
+
+- 静态绑定：即前期绑定。在程序执行前方法已经被绑定，此时由编译器或其它连接程序实现。针对java，简单的可以理解为程序编译期的绑定。java当中的方法只有final，static，private和构造方法是前期绑定的。
+- 动态绑定：即晚期绑定，也叫运行时绑定。在运行时根据具体对象的类型进行绑定。在java中，几乎所有的方法都是后期绑定的。
+
+“加载”(Loading)阶段是“类加载”(Class Loading)过程的第一个阶段，在此阶段，虚拟机需要完成以下三件事情：
+
+1. 通过一个类的全限定名来获取定义此类的二进制字节流。
+2. 将这个字节流所代表的静态存储结构转化为方法区的运行时数据结构。
+3. 在Java堆中生成一个代表这个类的java.lang.Class对象，作为方法区这些数据的访问入口。
+
+验证是连接阶段的第一步，这一阶段的目的是为了确保Class文件的字节流中包含的信息符合当前虚拟机的要求，并且不会危害虚拟机自身的安全。
+
+准备阶段是为类的静态变量分配内存并将其初始化为默认值，这些内存都将在方法区中进行分配。准备阶段不分配类中的实例变量的内存，实例变量将会在对象实例化时随着对象一起分配在Java堆中。
+
+解析阶段是虚拟机将常量池内的符号引用替换为直接引用的过程。
+
+类初始化是类加载过程的最后一步，前面的类加载过程，除了在加载阶段用户应用程序可以通过自定义类加载器参与之外，其余动作完全由虚拟机主导和控制。到了初始化阶段，才真正开始执行类中定义的Java程序代码。
+
+**双亲委派模型：Bootstrap ClassLoader、Extension ClassLoader、ApplicationClassLoader。**
+
+1. 启动类加载器，负责将存放在<JAVA_HOME>\lib目录中的，或者被-Xbootclasspath参数所指定的路径中，并且是虚拟机识别的（仅按照文件名识别，如rt.jar，名字不符合的类库即时放在lib目录中也不会被加载）类库加载到虚拟机内存中。启动类加载器无法被java程序直接引用。
+2. 扩展类加载器：负责加载<JAVA_HOME>\lib\ext目录中的，或者被java.ext.dirs系统变量所指定的路径中的所有类库，开发者可以直接使用该类加载器。
+3. 应用程序类加载器：负责加载用户路径上所指定的类库，开发者可以直接使用这个类加载器，也是默认的类加载器。 三种加载器的关系：启动类加载器->扩展类加载器->应用程序类加载器->自定义类加载器。
+
+这种关系即为类加载器的双亲委派模型。其要求除启动类加载器外，其余的类加载器都应当有自己的父类加载器。这里类加载器之间的父子关系一般不以继承关系实现，而是用组合的方式来复用父类的代码。
+
+双亲委派模型的工作过程：如果一个类加载器接收到了类加载的请求，它首先把这个请求委托给他的父类加载器去完成，每个层次的类加载器都是如此，因此所有的加载请求都应该传送到顶层的启动类加载器中，只有当父加载器反馈自己无法完成这个加载请求（它在搜索范围中没有找到所需的类）时，子加载器才会尝试自己去加载。
+
+好处：java类随着它的类加载器一起具备了一种带有优先级的层次关系。例如类java.lang.Object，它存放在rt.jar中，无论哪个类加载器要加载这个类，最终都会委派给启动类加载器进行加载，因此Object类在程序的各种类加载器环境中都是同一个类。相反，如果用户自己写了一个名为java.lang.Object的类，并放在程序的Classpath中，那系统中将会出现多个不同的Object类，java类型体系中最基础的行为也无法保证，应用程序也会变得一片混乱。
+
+实现：在java.lang.ClassLoader的loadClass()方法中，先检查是否已经被加载过，若没有加载则调用父类加载器的loadClass()方法，若父加载器为空则默认使用启动类加载器作为父加载器。如果父加载失败，则抛出ClassNotFoundException异常后，再调用自己的findClass()方法进行加载。
+
+**分派：静态分派与动态分派。**
+
+静态分派与重载有关，虚拟机在重载时是通过参数的静态类型，而不是运行时的实际类型作为判定依据的；静态类型在编译期是可知的； 动态分派与重写（Override）相关，invokevirtual(调用实例方法)指令执行的第一步就是在运行期确定接收者的实际类型，根据实际类型进行方法调用；
+
+**GC收集器有哪些？CMS收集器与G1收集器的特点。**
+
+**自动内存管理机制，GC算法，运行时数据区结构，可达性分析工作原理，如何分配对象内存**
+
+**反射机制，双亲委派机制，类加载器的种类**
+
+**Jvm内存模型，先行发生原则，violate关键字作用**
 
 
 
+### 虚拟机类加载机制
+
+**虚拟机把描述类的数据从Class文件加载到内存，并对数据进行校验、转换解析和初始化，最终形成可以被Java虚拟机直接使用的Java类型，这就是虚拟机的类加载机制。**
+
+类从被加载到虚拟内存中开始，到卸载内存为止，它的整个生命周期包括了：加载(Loading)、验证(Verification)、准备(Preparation)、解析(Resolution)、初始化(Initialization)、使用(Using)和卸载(Unloading)七个阶段。其中，验证，准备和解析三个部分统称为连接(Linking)。
+
+\###类加载的过程 类加载的全过程，加载，验证，准备，解析和初始化这五个阶段。
+
+------
+
+\####加载 在加载阶段，虚拟机需要完成以下三件事情：
+
+- 通过一个类的全限定名来获取定义此类的二进制字节流
+- 将这个字节流所代表的静态存储结构转换为方法区的运行时数据结构
+- 在Java堆中生成一个代表这个类的java.lang.Class对象，作为方法区这些数据的访问入口
+
+\####验证 这一阶段的目的是为了确保Class文件的字节流中包含的信息符合当前虚拟机的要求，并且不会危害虚拟机自身的安全。不同的虚拟机对类验证的实现可能有所不同，但大致上都会完成下面四个阶段的检验过程：文件格式验证、元数据验证、字节码验证和符号引用验证。
+
+**文件格式验证**
+
+第一阶段要验证字节流是否符合Class文件格式的规范，并且能被当前版本的虚拟机处理。
+
+**元数据验证**
+
+第二阶段是对字节码描述的信息进行语义分析，以保证其描述的信息符合Java语言规范的要求。
+
+**字节码验证**
+
+第三阶段时整个验证过程中最复杂的一个阶段，主要工作是数据流和控制流的分析。在第二阶段对元数据信息中的数据类型做完校验后，这阶段将对类的方法体进行校验分析。这阶段的任务是保证被校验类的方法在运行时不会做出危害虚拟机安全的行为。
+
+**符号引用验证**
+
+最后一个阶段的校验发生在虚拟机将符号引用直接转化为直接引用的时候，这个转化动作将在连接的第三个阶段－解析阶段产生。符号引用验证可以看作是对类自身以外（常量池中的各种符号引用）的信息进行匹配性的校验。
+
+\####准备 准备阶段是正式为类变量分配内存并设置类变量初始值的阶段，这些内存都将在方法区进行分配。
+
+\####解析 解析阶段是虚拟机将常量池的符号引用转换为直接引用的过程。解析动作主要针对类或接口、字段、类方法、接口方法四类符号引用进行。
+
+- 类或接口的解析
+- 字段解析
+- 类方法解析
+- 接口方法解析
+
+\####初始化 前面的类加载过程中，除了在加载阶段用户应用程序可以通过自定义类加载器参与之外，其余动作完全由Java虚拟机主导和控制。到了初始化阶段，才真正开始执行类中定义的Java程序代码（或者说是字节码）。在准备阶段，变量已经赋过一次系统要求的初始值，而在初始化阶段，则是根据程序员通过程序制定的主观计划去初始化类变量和其他资源，或者说初始化阶段是执行类构造器()方法的过程。
+
+## ###类加载器
+
+\####类与类加载器 虚拟机设计团队把类加载阶段中的"通过一个类的全限定名来获取描述此类的二进制字节流"这个动作放到Java虚拟机外部去实现，以便让程序自己决定如何去获取所需的类。实现这个动作的代码模块被称为"类加载器"。
+
+\####双亲委派模型 站在Java虚拟机的角度讲，只存在两种不同的类加载器：一种是启动类加载器(Bootstrap ClassLoader)，这个类加载器使用C++语言实现，是虚拟机自身的一部分；另外一种就是所有其他的类加载器，这些类加载器都由Java语言实现，独立于虚拟机外部，并且全部继承自抽象类java.lang.ClassLoader。从Java开发人员的角度来看，类加载器还可以分得更细致一些，绝大部分Java程序都会使用到以下三种系统提供的类加载器：
+
+- 启动类加载器
+- 扩展类加载器
+- 应用程序类加载器
 
 
-## 虚拟机
 
-java 虚拟机的回收算法
+### **Java内存区域与内存溢出**
+
+\##内存区域
+
+Java虚拟机在执行Java程序的过程中会把他所管理的内存划分为若干个不同的数据区域。Java虚拟机规范将JVM所管理的内存分为以下几个运行时数据区：程序计数器，Java虚拟机栈，本地方法栈，Java堆，方法区。下面详细阐述各数据区所存储的数据类型。
+
+[![这里写图片描述](https://camo.githubusercontent.com/8b425b7f556dd71e6fd98294ecd868f4fa372c98/687474703a2f2f696d672e626c6f672e6373646e2e6e65742f3230313630343031313432303239333733)](https://camo.githubusercontent.com/8b425b7f556dd71e6fd98294ecd868f4fa372c98/687474703a2f2f696d672e626c6f672e6373646e2e6e65742f3230313630343031313432303239333733)
+
+**程序计数器（Program Counter Register）**
+
+一块较小的内存空间，它是当前线程所执行的子节码的行号指示器，字节码解释器工作时通过改变该计数器的值来选择下一条需要执行的子节码指令，分支、跳转、循环等基础功能都要依赖它来实现。每条线程都有一个独立的程序计数器，各线程间的计数器互不影响，因此该区域是线程私有的。
+
+当线程在执行一个Java方法时，该计数器纪录的是正在执行的虚拟机字节吗指令的地址，当线程在执行的是Native方法(调用本地操作系统方法)时，该计数器的值为空。另外，该内存区域是唯一一个在Java虚拟机规范中没有任何OOM（内存溢出：OutOfMemoryError）情况的区域。
+
+**Java虚拟机栈（Java Virtual Machine Stacks）**
+
+该区域也是线程私有的，它的生命周期也与线程相同。虚拟机栈描述的是Java方法执行的内存模型：每个方法被执行的时候都会创建一个帧栈，栈它是用于支持虚拟机进行方法调用和方法执行的数据结构。对于执行引擎来讲，活动线程中，只有栈顶的栈帧是有效的，称为当前栈，这个栈帧所关联的方法称为当前方法，执行引擎所运行的所有字节码都只针对当前的栈帧进行操作。栈帧用于存储局部变量表、操作数栈、动态链接、方法返回地址和一些额外的附加信息。在编译程序代码时，栈帧中需要分配多少内存，不会受到程序运行期变量数据的影响，而仅仅取决于具体的虚拟机实现。 在Java虚拟机规范中，对这个区域规定了两种异常情况：
+
+1. 如果线程请求的栈深度大于虚拟机所允许的深度，将抛出StackOverflowError异常。
+2. 如果虚拟机在动态扩展栈时无法申请到足够的内存空间，则抛出OutOfMemory异常。
+
+这两种情况存在着一些互相重叠的部分：当栈空间无法继续分配时，到底是内存太小，还是已使用的栈空间太大，其本质只是对同一件事情的两种描述而已。其本质上只是对一件事情的两种描述而已。在单线程的操作中，无论是由于栈帧太大，还是虚拟机栈空间太小，当栈空间无法分配时，虚拟机抛出的都是StackOverflowError异常，而不会得到OutOfMemoryError异常。而在多线程环境下，则会抛出OutOfMemory异常。
+
+下面详细说明栈帧中所存放的各部分信息的作用和数据结构。
+
+局部变量表是一组变量值存储空间，用于存放方法参数和方法内部定义的局部变量，其中存放的数据的类型是编译期可知的各种基本数据类型、对象引用（reference）和returnAddress类型（它指向了一条字节码指令的地址）。局部变量表所需的内存空间在编译期间完成分配，即在Java程序被编译成Class文件时，就确定了所需分配的最大局部变量表的容量。当进入一个方法时，这个方法需要在栈中分配多大的局部变量空间是完全确定的，在方法运行期间不会改变局部变量表的大小。 下面详细说明栈帧中所存放的各部分信息的作用和数据结构。
+
+1、局部变量表 局部变量表的容量以变量槽（Slot）为最小单位。在虚拟机规范中并没有明确指明一个Slot应占用的内存空间大小（允许其随着处理器、操作系统或虚拟机的不同而发生变化），一个Slot可以存放一个32位以内的数据类型：boolean、byte、char、short、int、float、reference和returnAddresss。reference是对象的引用类型，returnAddress是为字节指令服务的，它执行了一条字节码指令的地址。对于64位的数据类型（long和double），虚拟机会以高位在前的方式为其分配两个连续的Slot空间。
+
+虚拟机通过索引定位的方式使用局部变量表，索引值的范围是从0开始到局部变量表最大的Slot数量，对于32位数据类型的变量，索引n代表第n个Slot，对于64位的，索引n代表第n和第n+1两个Slot。
+
+在方法执行时，虚拟机是使用局部变量表来完成参数值到参数变量列表的传递过程的，如果是实例方法（非static），则局部变量表中的第0位索引的Slot默认是用于传递方法所属对象实例的引用，在方法中可以通过关键字“this”来访问这个隐含的参数。其余参数则按照参数表的顺序来排列，占用从1开始的局部变量Slot，参数表分配完毕后，再根据方法体内部定义的变量顺序和作用域分配其余的Slot。
+
+局部变量表中的Slot是可重用的，方法体中定义的变量，作用域并不一定会覆盖整个方法体，如果当前字节码PC计数器的值已经超过了某个变量的作用域，那么这个变量对应的Slot就可以交给其他变量使用。这样的设计不仅仅是为了节省空间，在某些情况下Slot的复用会直接影响到系统的而垃圾收集行为。
+
+2、操作数栈
+
+操作数栈又常被称为操作栈，操作数栈的最大深度也是在编译的时候就确定了。32位数据类型所占的栈容量为1,64为数据类型所占的栈容量为2。当一个方法开始执行时，它的操作栈是空的，在方法的执行过程中，会有各种字节码指令（比如：加操作、赋值元算等）向操作栈中写入和提取内容，也就是入栈和出栈操作。
+
+Java虚拟机的解释执行引擎称为“基于栈的执行引擎”，其中所指的“栈”就是操作数栈。因此我们也称Java虚拟机是基于栈的，这点不同于Android虚拟机，Android虚拟机是基于寄存器的。
+
+基于栈的指令集最主要的优点是可移植性强，主要的缺点是执行速度相对会慢些；而由于寄存器由硬件直接提供，所以基于寄存器指令集最主要的优点是执行速度快，主要的缺点是可移植性差。
+
+3、动态连接
+
+每个栈帧都包含一个指向运行时常量池（在方法区中，后面介绍）中该栈帧所属方法的引用，持有这个引用是为了支持方法调用过程中的动态连接。Class文件的常量池中存在有大量的符号引用，字节码中的方法调用指令就以常量池中指向方法的符号引用为参数。这些符号引用，一部分会在类加载阶段或第一次使用的时候转化为直接引用（如final、static域等），称为静态解析，另一部分将在每一次的运行期间转化为直接引用，这部分称为动态连接。
+
+4、方法返回地址
+
+当一个方法被执行后，有两种方式退出该方法：执行引擎遇到了任意一个方法返回的字节码指令或遇到了异常，并且该异常没有在方法体内得到处理。无论采用何种退出方式，在方法退出之后，都需要返回到方法被调用的位置，程序才能继续执行。方法返回时可能需要在栈帧中保存一些信息，用来帮助恢复它的上层方法的执行状态。一般来说，方法正常退出时，调用者的PC计数器的值就可以作为返回地址，栈帧中很可能保存了这个计数器值，而方法异常退出时，返回地址是要通过异常处理器来确定的，栈帧中一般不会保存这部分信息。
+
+方法退出的过程实际上等同于把当前栈帧出站，因此退出时可能执行的操作有：恢复上层方法的局部变量表和操作数栈，如果有返回值，则把它压入调用者栈帧的操作数栈中，调整PC计数器的值以指向方法调用指令后面的一条指令。
+
+**本地方法栈（Native Method Stacks）**
+
+该区域与虚拟机栈所发挥的作用非常相似，只是虚拟机栈为虚拟机执行Java方法服务，而本地方法栈则为使用到的本地操作系统（Native）方法服务。
+
+**Java堆（Java Heap）**
+
+Java Heap是Java虚拟机所管理的内存中的最大的一块，它是所有线程共享的一块内存区域。几乎所有的对象实例和数组都在这类分配内存。Java Heap是垃圾收集器管理的主要区域，因此很多时候也被称为"GC堆"。
+
+根据Java虚拟机的规定，Java堆可以处在物理上不连续的内存空间中，只要逻辑上是连续的即可。如果在堆中没有内存可分配时，并且堆也无法扩展时，将会抛出OutOfMemory。
+
+**方法区（Method Area）**
+
+方法区也是各个线程共享的内存区域，它用于存储已经被虚拟机加载的类信息、常量、静态变量、即时编译器编译后的代码等数据。方法区域又被称为"永久代"。但着这仅仅对于Sun HotSpot来讲，JRocket和IBMJ9虚拟机中并不存在永久代的概念。Java虚拟机规范把方法区描述为Java堆的一个逻辑部分，而且它和Java Heap一样不需要连续的内存，可以选择固定大小或可扩展，另外，虚拟机规范允许该区域可以选择不实现垃圾回收。相对而言，垃圾收集行为在这个区域比较少出现。该区域的内存回收目标主要针是对废弃常量的和无用类的回收。运行时常量池是方法区的一部分，Class文件中除了有类的版本、字段、方法、接口等描述信息外，还有一项信息是常量池（Class文件常量池），用于存放编译器生成的各种字面量和符号引用，这部分内容将在类加载后存放到方法区的运行时常量池中。运行时常量池相对于Class文件常量池的另一个重要特征是具备动态性，Java语言并不要求常量一定只能在编译期产生，也就是并非预置入Class文件中的常量池的内容才能进入方法区的运行时常量池，运行期间也可能将新的常量放入池中，这种特性被开发人员利用比较多的是String类的intern（）方法。
+
+根据Java虚拟机规范的规定，当方法区无法满足内存分配需求时，将抛出OutOfMemoryError异常。
+
+直接内存（Direct Memory）
+
+直接内存并不是虚拟机运行内存时数据区的一部分，也不是Java虚拟机规范中定义的内存区域，它直接从操作系统中分配内存，因此不受Java堆的大小的限制，但是会受到本机总内存的大小及处理器寻址空间的限制，因此它也可能导致OutOfMemoryError异常出现。在Java1.4中新引入了NIO机制，它是一种基于通道与缓冲区的新I/O方式，可以直接从操作系统中分配直接内存，可以直接从操作系统中分配直接内存，即在堆外分配内存，这样能在一些场景中提高性能，因为避免了在Java堆和Native堆中来回复制数据。
+
+内存溢出
+
+下面给出个内存区域内存溢出的简单测试方法
+
+[![这里写图片描述](https://camo.githubusercontent.com/c0ae7ae64be1326fd5e1ad5f6f2882e17668a6c2/687474703a2f2f696d672e626c6f672e6373646e2e6e65742f3230313630343031313733383439303134)](https://camo.githubusercontent.com/c0ae7ae64be1326fd5e1ad5f6f2882e17668a6c2/687474703a2f2f696d672e626c6f672e6373646e2e6e65742f3230313630343031313733383439303134)
+
+这里有一点要重点说明，在多线程情况下，给每个线程的栈分配的内存越大，反而越容易产生内存产生内存溢出一场。操作系统为每个进程分配的内存是有限制的，虚拟机提供了参数来控制Java堆和方法区这两部分内存的最大值，忽略掉程序计数器消耗的内存（很小），以及进程本身消耗的内存，剩下的内存便给了虚拟机栈和本地方法栈，每个线程分配到的栈容量越大，可以建立的线程数量自然就越少。因此，如果是建立过多的线程导致的内存溢出，在不能减少线程数的情况下，就只能通过减少最大堆和每个线程的栈容量来换取更多的线程。 另外，由于Java堆内也可能发生内存泄露（Memory Leak），这里简要说明一下内存泄露和内存溢出的区别：
+
+内存泄漏是指分配出去的内存没有被回收回来，由于失去了对该内存区域的控制，因而造成了资源的浪费。Java中一般不会产生内存泄漏，因为有垃圾回收器自动回收垃圾，但这也不绝对，当我们new了对象，并保存了其引用，但是后面一直没用它，而垃圾回收器又不会去回收它，这就会造成内存泄漏。
+
+内存溢出是指程序所需要的内存超过了系统所能分配的内存（包括动态扩展）的上限。
+
+对象实例化分析
+
+对内存分配情况分析最常见的示例便是对象实例化：
+
+```
+Object obj = new Object();
+```
+
+这段代码的执行会涉及java栈、Java堆、方法区三个最重要的内存区域。假设该语句出现在方法体中，及时对JVM虚拟机不了解的Java使用这，应该也知道obj会作为引用类型（reference）的数据保存在Java栈的本地变量表中，而会在Java堆中保存该引用的实例化对象，但可能并不知道，Java堆中还必须包含能查找到此对象类型数据的地址信息（如对象类型、父类、实现的接口、方法等），这些类型数据则保存在方法区中。
+
+另外，由于reference类型在Java虚拟机规范里面只规定了一个指向对象的引用，并没有定义这个引用应该通过哪种方式去定位，以及访问到Java堆中的对象的具体位置，因此不同虚拟机实现的对象访问方式会有所不同，主流的访问方式有两种：使用句柄池和直接使用指针。
+
+通过句柄池访问的方式如下：
+
+[![这里写图片描述](https://camo.githubusercontent.com/b31ea60069d80d7678cf9903a078292460f45558/687474703a2f2f696d672e626c6f672e6373646e2e6e65742f3230313630343031313735313331323037)](https://camo.githubusercontent.com/b31ea60069d80d7678cf9903a078292460f45558/687474703a2f2f696d672e626c6f672e6373646e2e6e65742f3230313630343031313735313331323037)
+
+通过直接指针访问的方式如下：
+
+[![这里写图片描述](https://camo.githubusercontent.com/593253604897e799057285118d7f122be415f3e6/687474703a2f2f696d672e626c6f672e6373646e2e6e65742f3230313630343031313735323033393236)](https://camo.githubusercontent.com/593253604897e799057285118d7f122be415f3e6/687474703a2f2f696d672e626c6f672e6373646e2e6e65742f3230313630343031313735323033393236)
+
+这两种对象的访问方式各有优势，使用句柄访问方式的最大好处就是reference中存放的是稳定的句柄地址，在对象被移动（垃圾收集时移动对象是非常普遍的行为）时只会改变句柄中的实例数据指针，而reference本身不需要修改。使用直接指针访问方式的最大好处是速度快，它节省了一次指针定位的时间开销。目前Java默认使用的HotSpot虚拟机采用的便是是第二种方式进行对象访问的。
+
+
+
+## java 虚拟机的回收算法
 
 > 先回收之前 我们需要做对象存活判断，一个是引用计数，一个是可达性分析。
 >
@@ -237,6 +1676,506 @@ java 虚拟机的回收算法
 > * 复制算法  将内存分为两块，当一块用完了，将还活着的对象复制到另一块，然后将用完了的这块内存清理掉。优点是云行高效，缺点是只有一半的内存，复制长生存期对象也会导致效率降低
 > * 标记-整理算法  与标记-清除一样，不同的是 不直接清除内存，而是让存活对象向一端移动，然后清理端边界以外的内存。、
 > * 分代收集算法 把java 堆分为 新生代 和老年代 ，新生代 就是每次收集时会有大批对象死去，就用复制算法。老年代相反，每次收集时 对象存活率高，就使用 标记-清理 或者 标记-整理。
+
+
+
+## Java中的内存泄漏
+
+1.Java内存回收机制
+
+不论哪种语言的内存分配方式，都需要返回所分配内存的真实地址，也就是返回一个指针到内存块的首地址。Java中对象是采用new或者反射的方法创建的，这些对象的创建都是在堆（Heap）中分配的，所有对象的回收都是由Java虚拟机通过垃圾回收机制完成的。GC为了能够正确释放对象，会监控每个对象的运行状况，对他们的申请、引用、被引用、赋值等状况进行监控，Java会使用有向图的方法进行管理内存，实时监控对象是否可以达到，如果不可到达，则就将其回收，这样也可以消除引用循环的问题。在Java语言中，判断一个内存空间是否符合垃圾收集标准有两个：一个是给对象赋予了空值null，以下再没有调用过，另一个是给对象赋予了新值，这样重新分配了内存空间。
+
+2.Java内存泄漏引起的原因
+
+内存泄漏是指无用对象（不再使用的对象）持续占有内存或无用对象的内存得不到及时释放，从而造成内存空间的浪费称为内存泄漏。内存泄露有时不严重且不易察觉，这样开发者就不知道存在内存泄露，但有时也会很严重，会提示你Out of memory。
+
+Java内存泄漏的根本原因是什么呢？长生命周期的对象持有短生命周期对象的引用就很可能发生内存泄漏，尽管短生命周期对象已经不再需要，但是因为长生命周期持有它的引用而导致不能被回收，这就是Java中内存泄漏的发生场景。具体主要有如下几大类：
+
+1、静态集合类引起内存泄漏：
+
+像HashMap、Vector等的使用最容易出现内存泄露，这些静态变量的生命周期和应用程序一致，他们所引用的所有的对象Object也不能被释放，因为他们也将一直被Vector等引用着。
+
+例如
+
+```
+Static Vector v = new Vector(10);
+for (int i = 1; i<100; i++)
+{
+Object o = new Object();
+v.add(o);
+o = null;
+}
+```
+
+在这个例子中，循环申请Object 对象，并将所申请的对象放入一个Vector 中，如果仅仅释放引用本身（o=null），那么Vector 仍然引用该对象，所以这个对象对GC 来说是不可回收的。因此，如果对象加入到Vector 后，还必须从Vector 中删除，最简单的方法就是将Vector对象设置为null。
+
+2、当集合里面的对象属性被修改后，再调用remove()方法时不起作用。
+
+例如：
+
+```
+public static void main(String[] args)
+{
+Set<Person> set = new HashSet<Person>();
+Person p1 = new Person("唐僧","pwd1",25);
+Person p2 = new Person("孙悟空","pwd2",26);
+Person p3 = new Person("猪八戒","pwd3",27);
+set.add(p1);
+set.add(p2);
+set.add(p3);
+System.out.println("总共有:"+set.size()+" 个元素!"); //结果：总共有:3 个元素!
+p3.setAge(2); //修改p3的年龄,此时p3元素对应的hashcode值发生改变
+
+set.remove(p3); //此时remove不掉，造成内存泄漏
+
+set.add(p3); //重新添加，居然添加成功
+System.out.println("总共有:"+set.size()+" 个元素!"); //结果：总共有:4 个元素!
+for (Person person : set)
+{
+System.out.println(person);
+}
+}
+```
+
+3、监听器
+
+在java 编程中，我们都需要和监听器打交道，通常一个应用当中会用到很多监听器，我们会调用一个控件的诸如addXXXListener()等方法来增加监听器，但往往在释放对象的时候却没有记住去删除这些监听器，从而增加了内存泄漏的机会。
+
+4、各种连接
+
+比如数据库连接（dataSourse.getConnection()），网络连接(socket)和io连接，除非其显式的调用了其close（）方法将其连接关闭，否则是不会自动被GC 回收的。对于Resultset 和Statement 对象可以不进行显式回收，但Connection 一定要显式回收，因为Connection 在任何时候都无法自动回收，而Connection一旦回收，Resultset 和Statement 对象就会立即为NULL。但是如果使用连接池，情况就不一样了，除了要显式地关闭连接，还必须显式地关闭Resultset Statement 对象（关闭其中一个，另外一个也会关闭），否则就会造成大量的Statement 对象无法释放，从而引起内存泄漏。这种情况下一般都会在try里面去的连接，在finally里面释放连接。
+
+5、内部类和外部模块的引用
+
+内部类的引用是比较容易遗忘的一种，而且一旦没释放可能导致一系列的后继类对象没有释放。此外程序员还要小心外部模块不经意的引用，例如程序员A 负责A 模块，调用了B 模块的一个方法如： public void registerMsg(Object b); 这种调用就要非常小心了，传入了一个对象，很可能模块B就保持了对该对象的引用，这时候就需要注意模块B 是否提供相应的操作去除引用。
+
+6、单例模式
+
+不正确使用单例模式是引起内存泄漏的一个常见问题，单例对象在初始化后将在JVM的整个生命周期中存在（以静态变量的方式），如果单例对象持有外部的引用，那么这个对象将不能被JVM正常回收，导致内存泄漏，考虑下面的例子：
+
+```
+class A{
+public A(){
+B.getInstance().setA(this);
+}
+....
+}
+//B类采用单例模式
+class B{
+private A a;
+private static B instance=new B();
+public B(){}
+public static B getInstance(){
+return instance;
+}
+public void setA(A a){
+this.a=a;
+}
+//getter...
+} 
+```
+
+显然B采用singleton模式，它持有一个A对象的引用，而这个A类的对象将不能被回收。想象下如果A是个比较复杂的对象或者集合类型会发生什么情况
+
+
+
+
+
+# java面试题
+
+## java 特性
+
+* **equals与==的区别。**
+
+  > ==与equals的主要区别是：==常用于比较原生类型，而equals()方法用于检查对象的相等性。另一个不同的点是：如果==和equals()用于比较对象，当两个引用地址相同，==返回true。而equals()可以返回true或者false主要取决于重写实现。最常见的一个例子，字符串的比较，不同情况==和equals()返回不同的结果。equals()方法最重要的一点是，能够根据业务要求去重写，按照自定义规则去判断两个对象是否相等。重写equals()方法的时候，要注意一下hashCode是否会因为对象的属性改变而改变，否则在使用散列集合储存该对象的时候会碰到坑！！理解equals()方法的存在是很重要的。
+
+  * 使用==比较有两种情况：
+
+    > ```
+    > 比较基础数据类型(Java中基础数据类型包括八中：short,int,long,float,double,char,byte,boolen)：这种情况下，==比较的是他们的值是否相等。
+    >  引用间的比较：在这种情况下，==比较的是他们在内存中的地址，也就是说，除非引用指向的是同一个new出来的对象，此时他们使用`==`去比较得到true，否则，得到false。
+    > ```
+
+  * 使用equals进行比较：
+
+    > ```s
+    > equals追根溯源，是Object类中的一个方法，在该类中，equals的实现也仅仅只是比较两个对象的内存地址是否相等，但在一些子类中，如：String、Integer 等，该方法将被重写。
+    > ```
+
+  * 以`String`类为例子说明`eqauls`与`==`的区别：
+
+    > 在开始这个例子之前，同学们需要知道JVM处理String的一些特性。*Java的虚拟机在内存中开辟出一块单独的区域，用来存储字符串对象，这块内存区域被称为字符串缓冲池。\*当使用 `String a = "abc"`这样的语句进行定义一个引用的时候，首先会在\*字符串缓冲池*中查找是否已经相同的对象，如果存在，那么就直接将这个对象的引用返回给a，如果不存在，则需要新建一个值为"abc"的对象，再将新的引用返回a。`String a = new String("abc");`这样的语句明确告诉JVM想要产生一个新的String对象，并且值为"abc"，于是就*在堆内存中的某一个小角落开辟了一个新的String对象*。
+
+* **Object有哪些公用方法？**
+
+  > 1．clone方法
+  >
+  > 保护方法，实现对象的浅复制，只有实现了Cloneable接口才可以调用该方法，否则抛出CloneNotSupportedException异常。
+  >
+  > 主要是JAVA里除了8种基本类型传参数是值传递，其他的类对象传参数都是引用传递，我们有时候不希望在方法里讲参数改变，这是就需要在类中复写clone方法。
+  >
+  > 2．getClass方法
+  >
+  > final方法，获得运行时类型。
+  >
+  > 3．toString方法
+  >
+  > 该方法用得比较多，一般子类都有覆盖。
+  >
+  > 4．finalize方法
+  >
+  > 该方法用于释放资源。因为无法确定该方法什么时候被调用，很少使用。
+  >
+  > 5．equals方法
+  >
+  > 该方法是非常重要的一个方法。一般equals和==是不一样的，但是在Object中两者是一样的。子类一般都要重写这个方法。
+  >
+  > 6．hashCode方法
+  >
+  > 该方法用于哈希查找，可以减少在查找中使用equals的次数，重写了equals方法一般都要重写hashCode方法。这个方法在一些具有哈希功能的Collection中用到。
+  >
+  > 一般必须满足obj1.equals(obj2)==true。可以推出obj1.hashCode()==obj2.hashCode()，但是hashCode相等不一定就满足equals。不过为了提高效率，应该尽量使上面两个条件接近等价。
+  >
+  > 如果不重写hashCode(),在HashSet中添加两个equals的对象，会将两个对象都加入进去。
+  >
+  > 7．wait方法
+  >
+  > wait方法就是使当前线程等待该对象的锁，当前线程必须是该对象的拥有者，也就是具有该对象的锁。wait()方法一直等待，直到获得锁或者被中断。wait(long timeout)设定一个超时间隔，如果在规定时间内没有获得锁就返回。
+  >
+  > 调用该方法后当前线程进入睡眠状态，直到以下事件发生。
+  >
+  > （1）其他线程调用了该对象的notify方法。
+  >
+  > （2）其他线程调用了该对象的notifyAll方法。
+  >
+  > （3）其他线程调用了interrupt中断该线程。
+  >
+  > （4）时间间隔到了。
+  >
+  > 此时该线程就可以被调度了，如果是被中断的话就抛出一个InterruptedException异常。
+  >
+  > 8．notify方法
+  >
+  > 该方法唤醒在该对象上等待的某个线程。
+  >
+  > 9．notifyAll方法
+  >
+  > 该方法唤醒在该对象上等待的所有线程。
+
+* ### Java中引用类型的区别，具体的使用场景
+
+  * Java中引用类型分为四类：强引用、软引用、弱引用、虚引用。
+  * **强引用：** 强引用指的是通过 new 对象创建的引用，垃圾回收器即使是内存不足也不会回收强引用指向的对象。
+  * **软引用：** 软引用是通过 SoftRefrence 实现的，它的生命周期比强引用短，在内存不足，抛出 OOM 之前，垃圾回收器会回收软引用引用的对象。软引用常见的使用场景是存储一些内存敏感的缓存，当内存不足时会被回收。
+  * **弱引用**： 弱引用是通过 WeakRefrence 实现的，它的生命周期比软引用还短，GC 只要扫描到弱引用的对象就会回收。弱引用常见的使用场景也是存储一些内存敏感的缓存。
+  * **虚引用：** 虚引用是通过 FanttomRefrence 实现的，它的生命周期最短，随时可能被回收。如果一个对象只被虚引用引用，我们无法通过虚引用来访问这个对象的任何属性和方法。它的作用仅仅是保证对象在 finalize 后，做某些事情。虚引用常见的使用场景是跟踪对象被垃圾回收的活动，当一个虚引用关联的对象被垃圾回收器回收之前会收到一条系统通知。
+
+* **Hashcode的作用。**
+
+  	> 以Java.lang.Object来理解,JVM每new一个Object,它都会将这个Object丢到一个Hash哈希表中去,这样的话,下次做Object的比较或者取这个对象的时候,它会根据对象的hashcode再从Hash表中取这个对象。这样做的目的是提高取对象的效率。具体过程是这样:
+  	>
+  	> 1. new Object(),JVM根据这个对象的Hashcode值,放入到对应的Hash表对应的Key上,如果不同的对象确产生了相同的hash值,也就是发生了Hash key相同导致冲突的情况,那么就在这个Hash key的地方产生一个链表,将所有产生相同hashcode的对象放到这个单链表上去,串在一起。
+  	> 2. 比较两个对象的时候,首先根据他们的hashcode去hash表中找他的对象,当两个对象的hashcode相同,那么就是说他们这两个对象放在Hash表中的同一个key上,那么他们一定在这个key上的链表上。那么此时就只能根据Object的equal方法来比较这个对象是否equal。当两个对象的hashcode不同的话，肯定他们不能equal.
+
+* **try catch finally，try里有return，finally还执行么？**
+
+  > 会执行，在方法 返回调用者前执行。Java允许在finally中改变返回值的做法是不好的，因为如果存在finally代码块，try中的return语句不会立马返回调用者，而是纪录下返回值待finally代码块执行完毕之后再向调用者返回其值，然后如果在finally中修改了返回值，这会对程序造成很大的困扰，C#中就从语法规定不能做这样的事。
+
+* **Excption与Error区别**
+
+  > Error表示系统级的错误和程序不必处理的异常，是恢复不是不可能但很困难的情况下的一种严重问题；比如内存溢出，不可能指望程序能处理这样的状况；Exception表示需要捕捉或者需要程序进行处理的异常，是一种设计或实现问题；也就是说，它表示如果程序运行正常，从不会发生的情况。
+
+* **OOM：**
+
+  > 1. OutOfMemoryError异常
+  >
+  >    除了程序计数器外，虚拟机内存的其他几个运行时区域都有发生OutOfMemoryError(OOM)异常的可能，
+  >
+  >    Java Heap 溢出
+  >
+  >    一般的异常信息：java.lang.OutOfMemoryError:Java heap spacess
+  >
+  >    java堆用于存储对象实例，我们只要不断的创建对象，并且保证GC Roots到对象之间有可达路径来避免垃圾回收机制清除这些对象，就会在对象数量达到最大堆容量限制后产生内存溢出异常。
+  >
+  >    出现这种异常，一般手段是先通过内存映像分析工具(如Eclipse Memory Analyzer)对dump出来的堆转存快照进行分析，重点是确认内存中的对象是否是必要的，先分清是因为内存泄漏(Memory Leak)还是内存溢出(Memory Overflow)。
+  >
+  >    如果是内存泄漏，可进一步通过工具查看泄漏对象到GC Roots的引用链。于是就能找到泄漏对象时通过怎样的路径与GC Roots相关联并导致垃圾收集器无法自动回收。
+  >
+  >    如果不存在泄漏，那就应该检查虚拟机的参数(-Xmx与-Xms)的设置是否适当。
+  >
+  > 2. 虚拟机栈和本地方法栈溢出
+  >
+  >    如果线程请求的栈深度大于虚拟机所允许的最大深度，将抛出StackOverflowError异常。
+  >
+  >    如果虚拟机在扩展栈时无法申请到足够的内存空间，则抛出OutOfMemoryError异常
+  >
+  >    这里需要注意当栈的大小越大可分配的线程数就越少。
+  >
+  > 3. 运行时常量池溢出
+  >
+  >    异常信息：java.lang.OutOfMemoryError:PermGen space
+  >
+  >    如果要向运行时常量池中添加内容，最简单的做法就是使用String.intern()这个Native方法。该方法的作用是：如果池中已经包含一个等于此String的字符串，则返回代表池中这个字符串的String对象；否则，将此String对象包含的字符串添加到常量池中，并且返回此String对象的引用。由于常量池分配在方法区内，我们可以通过-XX:PermSize和-XX:MaxPermSize限制方法区的大小，从而间接限制其中常量池的容量。
+  >
+  > 4. 方法区溢出
+  >
+  >    方法区用于存放Class的相关信息，如类名、访问修饰符、常量池、字段描述、方法描述等。
+  >
+  >    异常信息：java.lang.OutOfMemoryError:PermGen space
+  >
+  >    方法区溢出也是一种常见的内存溢出异常，一个类如果要被垃圾收集器回收，判定条件是很苛刻的。在经常动态生成大量Class的应用中，要特别注意这点。
+
+* **Java面向对象的三个特征与含义。**
+
+  > 继承：继承是从已有类得到继承信息创建新类的过程。提供继承信息的类被称为父类（超类、基类）；得到继承信息的类被称为子类（派生类）。继承让变化中的软件系统有了一定的延续性，同时继承也是封装程序中可变因素的重要手段。
+  >
+  > 封装：通常认为封装是把数据和操作数据的方法绑定起来，对数据的访问只能通过已定义的接口。面向对象的本质就是将现实世界描绘成一系列完全自治、封闭的对象。我们在类中编写的方法就是对实现细节的一种封装；我们编写一个类就是对数据和数据操作的封装。可以说，封装就是隐藏一切可隐藏的东西，只向外界提供最简单的编程接口（可以想想普通洗衣机和全自动洗衣机的差别，明显全自动洗衣机封装更好因此操作起来更简单；我们现在使用的智能手机也是封装得足够好的，因为几个按键就搞定了所有的事情）。
+  >
+  > 多态：多态性是指允许不同子类型的对象对同一消息作出不同的响应。简单的说就是用同样的对象引用调用同样的方法但是做了不同的事情。多态性分为编译时的多态性和运行时的多态性。如果将对象的方法视为对象向外界提供的服务，那么运行时的多态性可以解释为：当A系统访问B系统提供的服务时，B系统有多种提供服务的方式，但一切对A系统来说都是透明的（就像电动剃须刀是A系统，它的供电系统是B系统，B系统可以使用电池供电或者用交流电，甚至还有可能是太阳能，A系统只会通过B类对象调用供电的方法，但并不知道供电系统的底层实现是什么，究竟通过何种方式获得了动力）。方法重载（overload）实现的是编译时的多态性（也称为前绑定），而方法重写（override）实现的是运行时的多态性（也称为后绑定）。运行时的多态是面向对象最精髓的东西，要实现多态需要做两件事：1. 方法重写（子类继承父类并重写父类中已有的或抽象的方法）；2. 对象造型（用父类型引用引用子类型对象，这样同样的引用调用同样的方法就会根据子类对象的不同而表现出不同的行为）。
+
+* **Interface与abstract类的区别。**
+
+  > 抽象类和接口都不能够实例化，但可以定义抽象类和接口类型的引用。一个类如果继承了某个抽象类或者实现了某个接口都需要对其中的抽象方法全部进行实现，否则该类仍然需要被声明为抽象类。接口比抽象类更加抽象，因为抽象类中可以定义构造器，可以有抽象方法和具体方法，而接口中不能定义构造器而且其中的方法全部都是抽象方法。抽象类中的成员可以是private、默认、protected、public的，而接口中的成员全都是public的。抽象类中可以定义成员变量，而接口中定义的成员变量实际上都是常量。有抽象方法的类必须被声明为抽象类，而抽象类未必要有抽象方法。
+
+* **Static class 与non static class的区别。**
+
+  > 内部静态类不需要有指向外部类的引用。但非静态内部类需要持有对外部类的引用。非静态内部类能够访问外部类的静态和非静态成员。静态类不能访问外部类的非静态成员。他只能访问外部类的静态成员。一个非静态内部类不能脱离外部类实体被创建，一个非静态内部类可以访问外部类的数据和方法，因为他就在外部类里面
+
+* **java多态的实现原理。**
+
+  > 当JVM执行Java字节码时，类型信息会存储在方法区中，为了优化对象的调用方法的速度，方法区的类型信息会增加一个指针，该指针指向一个记录该类方法的方法表，方法表中的每一个项都是对应方法的指针。
+  >
+  > 方法区：方法区和JAVA堆一样，是各个线程共享的内存区域，用于存储已被虚拟机加载的类信息、常量、静态变量、即时编译器编译后的代码等数据。 运行时常量池：它是方法区的一部分，Class文件中除了有类的版本、方法、字段等描述信息外，还有一项信息是常量池，用于存放编译器生成的各种符号引用，这部分信息在类加载时进入方法区的运行时常量池中。 方法区的内存回收目标是针对常量池的回收及对类型的卸载。
+  >
+  > 方法表的构造
+  >
+  > 由于java的单继承机制，一个类只能继承一个父类，而所有的类又都继承Object类，方法表中最先存放的是Object的方法，接下来是父类的方法，最后是该类本身的方法。如果子类改写了父类的方法，那么子类和父类的那些同名的方法共享一个方法表项。
+  >
+  > 由于这样的特性，使得方法表的偏移量总是固定的，例如，对于任何类来说，其方法表的equals方法的偏移量总是一个定值，所有继承父类的子类的方法表中，其父类所定义的方法的偏移量也总是一个定值。
+  >
+  > 实例
+  >
+  > 假设Class A是Class B的子类，并且A改写了B的方法的method()，那么B来说，method方法的指针指向B的method方法入口；对于A来说，A的方法表的method项指向自身的method而非父类的。
+  >
+  > 流程：调用方法时，虚拟机通过对象引用得到方法区中类型信息的方法表的指针入口，查询类的方法表 ，根据实例方法的符号引用解析出该方法在方法表的偏移量，子类对象声明为父类类型时，形式上调用的是父类的方法，此时虚拟机会从实际的方法表中找到方法地址，从而定位到实际类的方法。 注：所有引用为父类，但方法区的类型信息中存放的是子类的信息，所以调用的是子类的方法表。
+
+* **foreach与正常for循环效率对比。**
+
+  > 直接for循环效率最高，其次是迭代器和 ForEach操作。 作为语法糖，其实 ForEach 编译成 字节码之后，使用的是迭代器实现的，反编译后，testForEach方法如下：
+
+* **反射机制**
+
+  > JAVA反射机制是在运行状态中, 对于任意一个类, 都能够知道这个类的所有属性和方法; 对于任意一个对象, 都能够调用它的任意一个方法和属性; 这种动态获取的信息以及动态调用对象的方法的功能称为java语言的反射机制.
+  >
+  > 主要作用有三：
+  >
+  > 运行时取得类的方法和字段的相关信息。
+  >
+  > 创建某个类的新实例(.newInstance())
+  >
+  > 取得字段引用直接获取和设置对象字段，无论访问修饰符是什么。
+  >
+  > 用处如下：
+  >
+  > 观察或操作应用程序的运行时行为。
+  >
+  > 调试或测试程序，因为可以直接访问方法、构造函数和成员字段。
+  >
+  > 通过名字调用不知道的方法并使用该信息来创建对象和调用方法。
+
+* **try catch 块，try里有return，finally也有return，如何执行**
+
+* **泛型的优缺点**
+
+  > 优点：
+  >
+  > 使用泛型类型可以最大限度地重用代码、保护类型的安全以及提高性能。
+  >
+  > 泛型最常见的用途是创建集合类。
+  >
+  > 缺点：
+  >
+  > 在性能上不如数组快。
+
+* **泛型常用特点，List`<String>`能否转为List`<Object>`**
+
+  > 能，但是利用类都继承自Object，所以使用是每次调用里面的函数都要通过强制转换还原回原来的类，这样既不安全，运行速度也慢。
+
+* **解析XML的几种方式的原理与特点：DOM、SAX、PULL。**
+
+* ### sleep 和 wait 的区别
+
+  * sleep 方法是 Thread 类中的静态方法，wait 是 Object 类中的方法
+  * sleep 并不会释放同步锁，而 wait 会释放同步锁
+  * sleep 可以在任何地方使用，而 wait 只能在同步方法或者同步代码块中使用
+  * sleep 中必须传入时间，而 wait 可以传，也可以不传，不传时间的话只有 notify 或者 notifyAll - 才能唤醒，传时间的话在时间之后会自动唤醒
+
+* ### volatile和synchronize的区别
+
+* ### final、finally、finalize区别
+
+  * final 可以修饰类、变量和方法。修饰类代表这个类不可被继承。修饰变量代表此变量不可被改变。修饰方法表示此方法不可被重写 (override)。
+  * finally 是保证重点代码一定会执行的一种机制。通常是使用 try-finally 或者 try-catch-finally 来进行文件流的关闭等操作。
+  * finalize 是 Object 类中的一个方法，它的设计目的是保证对象在垃圾收集前完成特定资源的回收。finalize 机制现在已经不推荐使用，并且在 JDK 9已经被标记为 deprecated。
+
+* ### Exception 和 Error的区别
+
+  * Exception 和 Error 都继承于 Throwable，在 Java 中，只有 Throwable 类型的对象才能被 throw 或者 catch，它是异常处理机制的基本组成类型.
+
+  * Exception 和 Error 体现了 Java 对不同异常情况的分类。Exception 是程序正常运行中，可以预料的意外情况，可能并且应该被捕获，进行相应的处理。
+
+  * Error 是指在正常情况下，不大可能出现的情况，绝大部分 Error 都会使程序处于非正常、不可恢复的状态。既然是非正常，所以不便于也不需要捕获，常见的 OutOfMemoryError 就是 Error 的子类。
+
+  * Exception 又分为 checked Exception 和 unchecked Exception。
+
+  * - checked Exception 在代码里必须显式的进行捕获，这是编译器检查的一部分。
+    - unchecked Exception 也就是运行时异常，类似空指针异常、数组越界等，通常是可以避免的逻辑错误，具体根据需求来判断是否需要捕获，并不会在编译器强制要求。
+
+## String
+
+* **stringbuffer与Stringbuilder的区别**
+
+> Java 平台提供了两种类型的字符串：String和StringBuffer / StringBuilder，它们可以储存和操作字符串。其中String是只读字符串，也就意味着String引用的字符串内容是不能被改变的。而StringBuffer和StringBulder类表示的字符串对象可以直接进行修改。StringBuilder是JDK1.5引入的，它和StringBuffer的方法完全相同，区别在于它是单线程环境下使用的，因为它的所有方面都没有被synchronized修饰，因此它的效率也比StringBuffer略高。
+>
+> 1、执行速度stringbuilder大于stringbuffer ，因为stringbuilder时线程非安全的。
+>
+> 2、stringbuffer与stringbuilder 都是在一个对象上操作，string是创建对象操作。
+>
+> 3、操作少量数据 =string       单线程操作大量数据stringBuidler  多线程操作大量数据 stringbuffer.
+>
+> 4.使用StringBuffer类的场景：在频繁进行字符串运算（如拼接、替换、删除等），并且运行在多线程环境中，则可以考虑使用StringBuffer，例如XML解析、HTTP参数解析和封装。
+>
+> 5.使用StringBuilder类的场景：在频繁进行字符串运算（如拼接、替换、和删除等），并且运行在单线程的环境中，则可以考虑使用StringBuilder，如SQL语句的拼装、JSON封装等。
+
+
+
+* **String类内部实现，能否改变String对象内容**
+
+  不能，string对象不可变，只能重新赋值。在方法里给string赋值，不能改变。
+
+
+
+## 集合
+
+* **ArrayList 跟linkList的区别**
+
+  * 1、底层数据结构不同，ArrayList 数据结构是数组，通过索引可以查询到对应的数据。LinkedList 数据结构是双向链表结构，每个元素都有上一个和下一个元素的引用。
+  * 2、 相对于ArrayList ,LinkedList 的插入、添加、删除速度更快，因为元素添加到集合种任意位置的时候，不需要像数组那样重新计算大小或者是更新索引。但是，查询速度更慢，数组通过索引就可以查到数据，链表只能挨个查询。
+  * 3、LinkedList比ArrayList 更占内存，因为LinkedList为每一个节点存储了两个引用，一个指向上一个元素，一个指向下一个元素。
+
+* **ArrayList、LinkedList、Vector的底层实现和区别**
+
+  * 从同步性来看，ArrayList和LinkedList是不同步的，而Vector是的。所以线程安全的话，可以使用ArrayList或LinkedList，可以节省为同步而耗费的开销。但在多线程下，有时候就不得不使用Vector了。当然，也可以通过一些办法包装ArrayList、LinkedList，使我们也达到同步，但效率可能会有所降低。
+  * 从内部实现机制来讲ArrayList和Vector都是使用Object的数组形式来存储的。当你向这两种类型中增加元素的时候，如果元素的数目超出了内部数组目前的长度它们都需要扩展内部数组的长度，Vector缺省情况下自动增长原来一倍的数组长度，ArrayList是原来的50%，所以最后你获得的这个集合所占的空间总是比你实际需要的要大。如果你要在集合中保存大量的数据，那么使用Vector有一些优势，因为你可以通过设置集合的初始化大小来避免不必要的资源开销。
+  * ArrayList和Vector中，从指定的位置（用index）检索一个对象，或在集合的末尾插入、删除一个对象的时间是一样的，可表示为O(1)。但是，如果在集合的其他位置增加或者删除元素那么花费的时间会呈线性增长O(n-i)，其中n代表集合中元素的个数，i代表元素增加或移除元素的索引位置，因为在进行上述操作的时候集合中第i和第i个元素之后的所有元素都要执行(n-i)个对象的位移操作。LinkedList底层是由双向循环链表实现的，LinkedList在插入、删除集合中任何位置的元素所花费的时间都是一样的O(1)，但它在索引一个元素的时候比较慢，为O(i)，其中i是索引的位置，如果只是查找特定位置的元素或只在集合的末端增加、移除元素，那么使用Vector或ArrayList都可以。如果是对其它指定位置的插入、删除操作，最好选择LinkedList。
+
+* **ArrayList的数组大小是如何保证可以添加大量数据的**
+
+  * arraylist 有一个自动扩容的机制，如果arraylist的大小已经不满足需求时，那么将数组变原长度的1.5倍，之后操作就是把老的数组拷贝到新的数组里面。
+
+* **hashMap的实现原理**
+
+  * HashMap 结构
+    * HashMap 的内部可以看做数组+链表的复合结构。数组被分为一个个的桶(bucket)。哈希值决定了键值对在数组中的寻址。具有相同哈希值的键值对会组成链表。需要注意的是当链表长度超过阈值(默认是8)的时候会触发树化，链表会变成树形结构。
+
+  * 把握HashMap的原理需要关注4个方法：hash、put、get、resize。
+
+    * hash方法。 将 key 的 hashCode 值的高位数据移位到低位进行异或运算。这么做的原因是有些 key 的 hashCode 值的差异集中在高位，而哈希寻址是忽略容量以上高位的，这种做法可以有效避免哈希冲突。
+
+    * put 方法。 put 方法主要有以下几个步骤
+
+      * 通过 hash 方法获取 hash 值，根据 hash 值寻址。
+      * 如果未发生碰撞，直接放到桶中。
+      * 如果发生碰撞，则以链表形式放在桶后。
+      * 当链表长度大于阈值后会触发树化，将链表转换为红黑树。
+      * 如果数组长度达到阈值，会调用 resize 方法扩展容量。
+
+    * **get方法。 get 方法主要有以下几个步骤：**
+
+      * 通过 hash 方法获取 hash 值，根据 hash 值寻址。
+      * 如果与寻址到桶的 key 相等，直接返回对应的 value。
+      * 如果发生冲突，分两种情况。如果是树，则调用 getTreeNode 获取 value；如果是链表则通过循环遍历查找对应的 value。
+
+    * **resize 方法。 resize 做了两件事：**
+
+    * - 将原数组扩展为原来的 2 倍
+      - 重新计算 index 索引值，将原节点重新放到新的数组中。这一步可以将原先冲突的节点分散到新的桶中。
+
+  * HashMap 基于 hashing 原理，我们通过 put() 和 get() 方法储存和获取对象。当我们将键值对传递给 put() 方法时，它调用键对象的 hashCode() 方法来计算 hashcode，让后找到 bucket 位置来储存 Entry 对象。当两个对象的 hashcode 相同时，它们的 bucket 位置相同，‘碰撞’会发生。因为 HashMap 使用链表存储对象，这个 Entry 会存储在链表中，当获取对象时，通过键对象的 equals() 方法找到正确的键值对，然后返回值对象。
+
+* **HashMap和HashTable的底层实现和区别，两者和ConcurrentHashMap的区别。**
+
+  * HashTable线程安全则是依靠方法简单粗暴的sychronized修饰，HashMap则没有相关的线程安全问题考虑。。
+
+    在以前的版本貌似ConcurrentHashMap引入了一个“分段锁”的概念，具体可以理解为把一个大的Map拆分成N个小的HashTable，根据key.hashCode()来决定把key放到哪个HashTable中。在ConcurrentHashMap中，就是把Map分成了N个Segment，put和get的时候，都是现根据key.hashCode()算出放到哪个Segment中。
+
+    通过把整个Map分为N个Segment（类似HashTable），可以提供相同的线程安全，但是效率提升N倍。
+
+* **HashMap的hashcode的作用？什么时候需要重写？如何解决哈希冲突？查找的时候流程是如何？**
+
+* **Arraylist和HashMap如何扩容？负载因子有什么作用？如何保证读写进程安全？**
+
+  * ArrayList 本身不是线程安全的。 所以正确的做法是去用 java.util.concurrent 里的 CopyOnWriteArrayList 或者某个同步的 Queue 类。
+
+    HashMap实现不是同步的。如果多个线程同时访问一个哈希映射，而其中至少一个线程从结构上修改了该映射，则它必须 保持外部同步。（结构上的修改是指添加或删除一个或多个映射关系的任何操作；仅改变与实例已经包含的键关联的值不是结构上的修改。）这一般通过对自然封装该映射的对象进行同步操作来完成。如果不存在这样的对象，则应该使用 Collections.synchronizedMap 方法来“包装”该映射。最好在创建时完成这一操作，以防止对映射进行意外的非同步访问.
+
+* **TreeMap、HashMap、LinkedHashMap的底层实现区别。**
+
+* **Collection包结构，与Collections的区别。**
+
+* **Set、List之间的区别是什么?**
+
+* **Map、Set、List、Queue、Stack的特点与用法。**
+
+  * Collection 是对象集合， Collection 有两个子接口 List 和 Set
+
+    List 可以通过下标 (1,2..) 来取得值，值可以重复
+
+    而 Set 只能通过游标来取值，并且值是不能重复的
+
+    ArrayList ， Vector ， LinkedList 是 List 的实现类
+
+    ArrayList 是线程不安全的， Vector 是线程安全的，这两个类底层都是由数组实现的
+
+    LinkedList 是线程不安全的，底层是由链表实现的
+
+    Map 是键值对集合
+
+    HashTable 和 HashMap 是 Map 的实现类
+    HashTable 是线程安全的，不能存储 null 值
+    HashMap 不是线程安全的，可以存储 null 值
+
+    Stack类：继承自Vector，实现一个后进先出的栈。提供了几个基本方法，push、pop、peak、empty、search等。
+
+    Queue接口：提供了几个基本方法，offer、poll、peek等。已知实现类有LinkedList、PriorityQueue等。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
