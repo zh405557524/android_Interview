@@ -13,6 +13,8 @@
 ## 2. Android 与 Java 序列化原理
 
 - **Java 序列化**：`Serializable` 通过反射遍历对象图，写入类元数据与字段；性能与体积一般，版本兼容需注意 `serialVersionUID`。
+    **优点：** 使用简单，声明接口即可。
+    **缺点：** 
 - **Android 推荐 `Parcelable`**：由开发者手写 `writeToParcel`/`CREATOR`，按字段顺序扁平写入 `Parcel`，**无反射、可裁剪字段**，启动 Activity、跨进程 Binder 更高效。
 - **其他**：`Bundle` 传参、JSON/Protobuf 等属于“另一种序列化形态”，按场景选用。
 

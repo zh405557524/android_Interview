@@ -9,7 +9,7 @@
 java篇
 
 1、集合
-	a、hashMap原理 b、集合的区别
+a、hashMap原理 b、集合的区别
 2、多线程
 3、反射
 4、gc原理
