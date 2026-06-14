@@ -1,0 +1,54 @@
+---
+description: 剧说 Flutter go_router 导航规则
+globs: "lib/routes/**/*.dart,lib/pages/**/*.dart"
+alwaysApply: false
+---
+
+# 04-导航规则
+
+## 1. 路由目录
+
+```text
+lib/routes/
+├── index.dart
+├── name.dart
+├── router.dart
+├── observers.dart
+└── transitions.dart
+```
+
+## 2. 路由表
+
+| RouteName | Path | 页面 | 登录要求 |
+|-----------|------|------|----------|
+| `main` | `/` | 主框架 | 否 |
+| `login` | `/login` | 登录页 | 否 |
+| `creationVideo` | `/creation/video` | 视频解说创建页 | 是 |
+| `workDetail` | `/works/:id` | 作品详情 | 是 |
+| `membership` | `/membership` | VIP 会员页 | 是 |
+| `pointsRecharge` | `/points/recharge` | 积分充值页 | 是 |
+| `pointsLedger` | `/points/ledger` | 积分详情 | 是 |
+| `invite` | `/invite` | 邀请好友 | 是 |
+| `settings` | `/settings` | 更多设置 | 是 |
+| `feedback` | `/feedback` | 意见反馈 | 是 |
+| `webview` | `/webview` | 协议 / 隐私 / 规则 | 否 |
+
+## 3. 跳转规则
+
+- 主 tab 内切换由 `MainController` 管理。
+- 详情和二级页使用 `context.pushNamed`。
+- 替换主路径使用 `context.goNamed`。
+- 不在业务代码里写裸路径字符串。
+
+## 4. 登录守卫
+
+- 守卫集中在 `routes/router.dart`。
+- 未登录访问需要登录的页面时跳转 `login`。
+- 登录成功后返回原目标页。
+- 登录页和协议 / 隐私页不需要登录。
+
+## 5. 参数规则
+
+- 作品详情 ID 走 `pathParameters`。
+- WebView 标题和 URL 走 `queryParameters`。
+- 复杂对象才走 `extra`，不能用全局变量偷传。

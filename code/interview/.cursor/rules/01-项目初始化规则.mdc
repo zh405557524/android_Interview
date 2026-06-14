@@ -1,0 +1,74 @@
+---
+description: 剧说 Flutter 项目初始化规则
+globs: "pubspec.yaml,lib/main.dart,lib/global.dart,lib/theme.dart"
+alwaysApply: false
+---
+
+# 01-项目初始化规则
+
+## 1. 项目定位
+
+剧说是 AI 视频解说创作 App。Flutter 工程负责移动端前端体验，当前后端、接口、数据库、供应商均待确定，因此初始化阶段必须先建立 Controller 级 mock / real 开关和真实 API 静态方法基线。
+
+## 2. 技术栈
+
+- Flutter
+- GetX
+- go_router
+- Dio
+- GetStorage
+- Hive
+- package_info_plus
+- flutter_screenutil，设计基准 `375 x 812`
+- flutter_localizations + intl
+
+不使用 Riverpod、Provider、Drift 作为本项目主路线。
+
+## 3. 初始化目标
+
+初始化必须完成：
+
+1. `pubspec.yaml` 基础依赖。
+2. `lib/main.dart` 启动入口。
+3. `lib/global.dart` 全局初始化。
+4. `lib/theme.dart` 深色主题和系统状态栏。
+5. `lib/routes/` 路由基础设施。
+6. `lib/services/` HTTP、Storage、Event、Mock 服务。
+7. `lib/store/` User、Config、Creation 全局状态。
+8. `lib/widgets/` CustomScaffold、Toast、Loading、Empty、Error。
+9. `lib/pages/main/` 最小三 tab 主框架。
+10. `test/widget_test.dart` 最小 smoke test。
+
+## 4. 启动流程
+
+```text
+main()
+  -> WidgetsFlutterBinding.ensureInitialized()
+  -> SystemChrome.setSystemUIOverlayStyle()
+  -> Global.init()
+  -> StorageService.init()
+  -> register services
+  -> register stores
+  -> runApp()
+  -> MaterialApp.router()
+```
+
+## 5. 全局注册
+
+`Global.init()` 必须注册：
+
+- `StorageService`
+- `EventService`
+- `MockService`
+- `HttpService`
+- `ConfigStore`
+- `UserStore`
+- `CreationStore`
+
+## 6. 初始化验收
+
+- `flutter pub get` 成功。
+- `flutter analyze` 通过。
+- `flutter test` 通过。
+- App 可启动到主框架占位页。
+- 工程内 `.cursor/rules/` 只包含本 Flutter 项目的规则文件。

@@ -1,0 +1,18 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:get/get.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+
+import '../../apis/index.dart';
+import '../../models/index.dart';
+import '../../routes/index.dart';
+import '../../services/index.dart';
+import '../../store/index.dart';
+import '../../theme.dart';
+import '../../utils/index.dart';
+import '../../widgets/index.dart';
+import '../main/index.dart';
+
+part 'controller.dart';
+part 'account_security_view.dart';
+part 'view.dart';

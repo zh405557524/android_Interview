@@ -1,0 +1,1417 @@
+---
+description: Flutter项目初始化规则 - 用于生成新项目的模板代码
+globs: "lib/**/*.dart,pubspec.yaml,test/**/*.dart,.cursor/rules/**/*.mdc"
+alwaysApply: false
+---
+
+# Flutter项目初始化规则
+
+## 规则目的
+
+本规则用于在新建Flutter项目时，快速生成标准化的项目结构和模板代码。避免手动创建重复性的基础代码，提高开发效率。
+
+## 使用场景
+
+- 新建Flutter项目
+- 需要标准化的项目结构
+- 需要基础的路由、状态管理、主题配置
+
+## 项目结构
+
+```
+project_name/
+├── lib/
+│   ├── apis/              # 网络接口
+│   │   └── index.dart
+│   ├── components/        # 业务组件
+│   │   └── index.dart
+│   ├── enums/            # 枚举类
+│   │   └── index.dart
+│   ├── models/           # 数据模型
+│   │   ├── params/       # 请求参数
+│   │   ├── responses/    # 响应模型
+│   │   └── index.dart
+│   ├── pages/            # 功能页面
+│   │   ├── main/         # 主页
+│   │   │   ├── index.dart
+│   │   │   ├── view.dart
+│   │   │   └── controller.dart
+│   │   └── login/        # 登录页
+│   │       ├── index.dart
+│   │       ├── view.dart
+│   │       └── controller.dart
+│   ├── plugins/          # 插件
+│   │   └── index.dart
+│   ├── routes/           # 路由配置
+│   │   ├── index.dart
+│   │   ├── router.dart
+│   │   ├── name.dart
+│   │   └── observers.dart
+│   ├── services/         # 服务层
+│   │   ├── http.dart
+│   │   ├── storage.dart
+│   │   ├── event.dart
+│   │   └── index.dart
+│   ├── store/            # 状态管理
+│   │   ├── user.dart
+│   │   ├── config.dart
+│   │   └── index.dart
+│   ├── utils/            # 工具类
+│   │   ├── constants.dart
+│   │   ├── logger.dart
+│   │   └── index.dart
+│   ├── widgets/          # 通用组件
+│   │   ├── button.dart
+│   │   ├── toast.dart
+│   │   └── index.dart
+│   ├── global.dart       # 全局配置
+│   ├── main.dart         # 应用入口
+│   └── theme.dart        # 主题配置
+├── assets/               # 资源文件
+│   └── images/
+├── android/              # Android平台
+├── ios/                  # iOS平台
+└── pubspec.yaml          # 依赖配置
+```
+
+## 1. main.dart 模板
+
+```dart
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:your_project/global.dart';
+import 'package:your_project/routes/index.dart';
+import 'package:your_project/theme.dart';
+import 'package:your_project/widgets/index.dart';
+
+void main() async {
+  final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+
+  // 设置系统UI样式
+  SystemChrome.setSystemUIOverlayStyle(CustomTheme.systemStyleLight);
+
+  // 添加超时机制，确保初始化不会无限等待
+  bool initCompleted = false;
+
+  // 启动定时器，确保5秒后无论如何都继续执行
+  Future.delayed(const Duration(seconds: 5), () {
+    if (!initCompleted) {
+      // 如果初始化未完成，强制继续（可根据需要添加日志或错误处理）
+    }
+  });
+
+  try {
+    await Global.init();
+  } catch (e) {
+    // 初始化失败时的错误处理
+    // 可以根据需要添加错误恢复逻辑，如清除缓存等
+    try {
+      // 示例：清除本地存储（根据实际需求调整）
+      // final prefs = await SharedPreferences.getInstance();
+      // await prefs.clear();
+      await Global.init();
+    } catch (e) {
+      // 如果再次失败，记录错误或使用默认配置
+    }
+  }
+
+  initCompleted = true;
+  runApp(const MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp.router(
+      title: '应用名称',
+      theme: CustomTheme.light,
+      themeMode: ThemeMode.light,
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale.fromSubtags(languageCode: 'en'),
+        Locale.fromSubtags(languageCode: 'zh'),
+      ],
+      locale: WidgetsBinding.instance.platformDispatcher.locale,
+      routerConfig: CustomRouter.config,
+      builder: (context, child) {
+        return MediaQuery(
+          data: MediaQuery.of(context),
+          child: Builder(
+            builder: (innerContext) {
+              // 使用 innerContext 初始化 ScreenUtil
+              ScreenUtil.init(
+                innerContext,
+                designSize: const Size(375, 812),
+                minTextAdapt: true,
+                splitScreenMode: true,
+              );
+
+              return CustomToast.init(
+                context: innerContext,
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(context).copyWith(
+                    textScaler: TextScaler.noScaling,
+                  ),
+                  child: child ?? const Material(),
+                ),
+              )(innerContext, child);
+            },
+          ),
+        );
+      },
+    );
+  }
+}
+```
+
+### 说明
+
+**保留的核心功能：**
+- ✅ 屏幕适配（ScreenUtil） - 使用 `designSize: Size(375, 812)` 作为移动端标准尺寸
+- ✅ 主题配置（CustomTheme） - 使用 `CustomTheme.light` 和 `systemStyleLight`
+- ✅ 国际化支持（Flutter Localizations） - 支持英文和中文
+- ✅ 路由配置（GoRouter） - 使用 `CustomRouter.config`
+- ✅ Toast初始化（CustomToast） - 支持全局提示
+- ✅ 错误处理机制 - 初始化失败时的恢复逻辑
+- ✅ 超时保护 - 防止初始化无限等待
+
+**去除的业务相关代码：**
+- ❌ Umeng APM SDK（性能监控）
+- ❌ 启动屏幕（FlutterNativeSplash）
+- ❌ 微信SDK相关
+- ❌ 桌面端判断和窗口管理
+- ❌ 其他第三方业务SDK
+
+**可选的扩展功能：**
+如果需要启动屏幕，可以添加：
+```dart
+import 'package:flutter_native_splash/flutter_native_splash.dart';
+
+// 在 main 函数中
+FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+// 初始化完成后
+FlutterNativeSplash.remove();
+```
+
+## 2. theme.dart 模板
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+abstract class CustomTheme {
+  // 基础间距
+  static const margin = 16.0;
+  static const padding = 16.0;
+
+  // 主题颜色
+  static const primary = Color(0xFF5497FF);
+  static const success = Color(0xFF0ED529);
+  static const warning = Color(0xFFFFD575);
+  static const error = Color(0xFFFF5F5F);
+  static const info = Color(0xFF309BFF);
+
+  // 背景色
+  static const mainBackground = Color(0xFFF6F9FF);
+  static const cardBackground = Color(0xFFFFFFFF);
+
+  // 文字颜色
+  static const textPrimary = Color(0xFF333333);
+  static const textSecondary = Color(0xFF666666);
+  static const textTertiary = Color(0xFF999999);
+
+  // 分割线颜色
+  static const dividerColor = Color(0xFFD8D8D8);
+  static const borderColor = Color(0xFFE0E0E0);
+
+  // 系统UI样式
+  static ThemeMode mode = ThemeMode.light;
+
+  static SystemUiOverlayStyle get systemStyle => const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarBrightness: Brightness.light,
+        statusBarIconBrightness: Brightness.dark,
+        systemNavigationBarDividerColor: Colors.transparent,
+        systemNavigationBarColor: Colors.white,
+        systemNavigationBarIconBrightness: Brightness.dark,
+      );
+
+  static SystemUiOverlayStyle get systemStyleLight => systemStyle.copyWith(
+        statusBarBrightness: Brightness.light,
+        statusBarIconBrightness: Brightness.dark,
+        systemNavigationBarIconBrightness: Brightness.dark,
+      );
+
+  static SystemUiOverlayStyle get systemStyleDark => systemStyle.copyWith(
+        statusBarBrightness: Brightness.dark,
+        statusBarIconBrightness: Brightness.light,
+        systemNavigationBarColor: const Color(0xFF0D0D0D),
+        systemNavigationBarIconBrightness: Brightness.light,
+      );
+
+  // 亮色主题
+  static ThemeData get light {
+    const scheme = ColorScheme.light(
+      surface: Color(0xFFF6F9FF),
+      onSurface: Color(0xFF333333),
+      surfaceContainer: Color(0xFFFFFFFF),
+      onSurfaceVariant: Color(0xFF999999),
+      primary: primary,
+      onPrimary: Colors.white,
+      secondary: Color(0xFF666666),
+      onSecondary: Color(0xFF999999),
+      outline: Color(0xFFD8D8D8),
+      outlineVariant: Color(0xFFE0E0E0),
+      error: error,
+      onError: Colors.white,
+    );
+
+    return _getTheme(scheme);
+  }
+
+  // 暗色主题
+  static ThemeData get dark {
+    const scheme = ColorScheme.dark(
+      surface: Color(0xFF111113),
+      onSurface: Colors.white,
+      surfaceContainer: Color(0xFF1B1B1C),
+      primary: primary,
+      onPrimary: Colors.white,
+      secondary: Color(0xFF999999),
+      onSecondary: Color(0xFF666666),
+      outline: Color(0xFF333333),
+      error: error,
+      onError: Colors.white,
+    );
+    return _getTheme(scheme);
+  }
+
+  static ThemeData _getTheme(ColorScheme scheme) {
+    return ThemeData(
+      colorScheme: scheme,
+      scaffoldBackgroundColor: scheme.surface,
+      splashColor: Colors.transparent,
+      highlightColor: Colors.transparent,
+      textSelectionTheme: const TextSelectionThemeData(
+        selectionColor: Color(0xFF25C1FF),
+        selectionHandleColor: Color(0xFF25C1FF),
+        cursorColor: Color(0xFF25C1FF),
+      ),
+      textTheme: TextTheme(
+        bodyMedium: TextStyle(
+          fontSize: 16,
+          color: scheme.onSurface,
+          height: 1.2,
+        ),
+      ),
+      dividerTheme: DividerThemeData(
+        color: scheme.outline,
+        thickness: 1,
+        space: 1,
+      ),
+      appBarTheme: AppBarTheme(
+        foregroundColor: scheme.onSurface,
+        backgroundColor: scheme.surface,
+        surfaceTintColor: Colors.transparent,
+        scrolledUnderElevation: 0,
+        elevation: 0,
+        centerTitle: true,
+        toolbarHeight: 44,
+        titleTextStyle: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.bold,
+          color: scheme.onSurface,
+        ),
+      ),
+      elevatedButtonTheme: const ElevatedButtonThemeData(
+        style: ButtonStyle(
+          minimumSize: WidgetStatePropertyAll(Size.zero),
+          maximumSize: WidgetStatePropertyAll(Size.infinite),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          splashFactory: NoSplash.splashFactory,
+          elevation: WidgetStatePropertyAll(0),
+        ),
+      ),
+    );
+  }
+}
+```
+
+## 3. 路由框架模板
+
+### routes/index.dart
+
+```dart
+library routes;
+
+import 'package:flutter/cupertino.dart';
+import 'package:go_router/go_router.dart';
+import 'package:your_project/pages/main/index.dart';
+import 'package:your_project/pages/login/index.dart';
+import 'package:your_project/store/index.dart';
+
+part 'router.dart';
+part 'name.dart';
+part 'observers.dart';
+
+export 'package:go_router/go_router.dart';
+```
+
+### routes/router.dart
+
+```dart
+part of 'index.dart';
+
+abstract class CustomRouter {
+  static final RouteObserver<Route> observer = RouteObservers();
+  static final List<String> history = [];
+  static final GlobalKey<NavigatorState> _navigatorKey = GlobalKey();
+
+  static BuildContext? get context {
+    return _navigatorKey.currentState?.overlay?.context;
+  }
+
+  static final GoRouter config = GoRouter(
+    initialLocation: '/',
+    navigatorKey: _navigatorKey,
+    observers: [observer],
+    redirect: (context, state) {
+      // 路由守卫：未登录时跳转到登录页
+      if (UserStore.to.isLogin) return null;
+      final currentRoute = state.matchedLocation;
+      if (![
+        state.namedLocation(RouteName.main),
+        state.namedLocation(RouteName.login),
+      ].contains(currentRoute)) {
+        return state.namedLocation(RouteName.login);
+      }
+      return null;
+    },
+    routes: [
+      // 主页
+      GoRoute(
+        path: '/',
+        name: RouteName.main,
+        pageBuilder: (context, state) => CupertinoPage(
+          name: state.fullPath,
+          key: state.pageKey,
+          child: const MainPage(),
+        ),
+      ),
+      // 登录页
+      GoRoute(
+        path: '/login',
+        name: RouteName.login,
+        pageBuilder: (context, state) => CupertinoPage(
+          name: state.fullPath,
+          key: state.pageKey,
+          child: const LoginPage(),
+        ),
+      ),
+    ],
+  );
+}
+```
+
+### routes/name.dart
+
+```dart
+part of 'index.dart';
+
+abstract class RouteName {
+  static const main = 'main';
+  static const login = 'login';
+}
+```
+
+### routes/observers.dart
+
+```dart
+part of 'index.dart';
+
+class RouteObservers extends RouteObserver<Route> {
+  @override
+  void didPush(Route route, Route? previousRoute) {
+    super.didPush(route, previousRoute);
+    if (route.settings.name != null) {
+      CustomRouter.history.add(route.settings.name!);
+    }
+  }
+
+  @override
+  void didPop(Route route, Route? previousRoute) {
+    super.didPop(route, previousRoute);
+    if (CustomRouter.history.isNotEmpty) {
+      CustomRouter.history.removeLast();
+    }
+  }
+}
+```
+
+## 4. global.dart 模板
+
+```dart
+import 'dart:io';
+import 'package:get/get.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:your_project/services/index.dart';
+import 'package:your_project/store/index.dart';
+
+class Global {
+  static final Global _instance = Global._internal();
+
+  factory Global() => _instance;
+
+  Global._internal();
+
+  PackageInfo? _platform;
+
+  static String channel = 'official';
+  static bool get isDesktop =>
+      Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+
+  static String get version => _instance._platform?.version ?? '0.0.0';
+
+  static String get build => _instance._platform?.buildNumber ?? '0';
+
+  static String get appName => _instance._platform?.appName ?? '-';
+
+  static Future<void> init() async {
+    await Future.wait([
+      _instance._initPlatform(),
+      Get.putAsync<StorageService>(() => StorageService().init()),
+    ]).whenComplete(() {
+      Get.put<EventService>(EventService());
+      Get.put<HttpService>(HttpService());
+      Get.put<ConfigStore>(ConfigStore());
+      Get.put<UserStore>(UserStore());
+    });
+  }
+
+  Future<void> _initPlatform() async {
+    _platform = await PackageInfo.fromPlatform();
+  }
+}
+```
+
+## 5. 服务层模板
+
+### services/index.dart
+
+```dart
+library services;
+
+import 'package:dio/dio.dart';
+import 'package:get/get.dart' hide Response, FormData, MultipartFile;
+import 'package:get_storage/get_storage.dart';
+export 'package:dio/dio.dart' hide Headers;
+
+part 'http.dart';
+part 'storage.dart';
+part 'event.dart';
+```
+
+### services/http.dart
+
+```dart
+part of 'services.dart';
+
+class HttpService extends GetxService {
+  late final Dio dio;
+
+  HttpService() {
+    dio = Dio(
+      BaseOptions(
+        baseUrl: 'https://api.example.com',
+        connectTimeout: const Duration(seconds: 30),
+        receiveTimeout: const Duration(seconds: 30),
+      ),
+    );
+
+    // 请求拦截器
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          // 添加token等
+          return handler.next(options);
+        },
+        onResponse: (response, handler) {
+          return handler.next(response);
+        },
+        onError: (error, handler) {
+          return handler.next(error);
+        },
+      ),
+    );
+  }
+
+  Future<Response<T>> get<T>(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    Options? options,
+  }) async {
+    return await dio.get<T>(
+      path,
+      queryParameters: queryParameters,
+      options: options,
+    );
+  }
+
+  Future<Response<T>> post<T>(
+    String path, {
+    dynamic data,
+    Map<String, dynamic>? queryParameters,
+    Options? options,
+  }) async {
+    return await dio.post<T>(
+      path,
+      data: data,
+      queryParameters: queryParameters,
+      options: options,
+    );
+  }
+}
+```
+
+### services/storage.dart
+
+```dart
+part of 'services.dart';
+
+class StorageService extends GetxService {
+  late final GetStorage _box;
+
+  Future<StorageService> init() async {
+    await GetStorage.init();
+    _box = GetStorage();
+    return this;
+  }
+
+  T? get<T>(String key) {
+    return _box.read<T>(key);
+  }
+
+  Future<void> set(String key, dynamic value) async {
+    await _box.write(key, value);
+  }
+
+  Future<void> remove(String key) async {
+    await _box.remove(key);
+  }
+
+  Future<void> clear() async {
+    await _box.erase();
+  }
+}
+```
+
+### services/event.dart
+
+```dart
+part of 'services.dart';
+
+class EventService extends GetxService {
+  // 事件总线实现
+  final _eventBus = <String, List<Function>>{};
+
+  void on(String event, Function callback) {
+    _eventBus[event] ??= [];
+    _eventBus[event]!.add(callback);
+  }
+
+  void off(String event, [Function? callback]) {
+    if (callback == null) {
+      _eventBus.remove(event);
+    } else {
+      _eventBus[event]?.remove(callback);
+    }
+  }
+
+  void emit(String event, [dynamic data]) {
+    _eventBus[event]?.forEach((callback) => callback(data));
+  }
+}
+```
+
+## 6. 状态管理模板
+
+### store/index.dart
+
+```dart
+library store;
+
+import 'package:get/get.dart';
+import 'package:your_project/services/index.dart';
+
+part 'user.dart';
+part 'config.dart';
+```
+
+### store/user.dart
+
+```dart
+part of 'store.dart';
+
+class UserStore extends GetxController {
+  static UserStore get to => Get.find();
+
+  final _storage = Get.find<StorageService>();
+
+  // 是否登录
+  final _isLogin = false.obs;
+  bool get isLogin => _isLogin.value;
+
+  // 用户信息
+  final _token = ''.obs;
+  String get token => _token.value;
+
+  @override
+  void onInit() {
+    super.onInit();
+    _loadUserInfo();
+  }
+
+  // 加载用户信息
+  void _loadUserInfo() {
+    final token = _storage.get<String>('token');
+    if (token != null && token.isNotEmpty) {
+      _token.value = token;
+      _isLogin.value = true;
+    }
+  }
+
+  // 登录
+  Future<void> login(String token) async {
+    _token.value = token;
+    _isLogin.value = true;
+    await _storage.set('token', token);
+  }
+
+  // 登出
+  Future<void> logout() async {
+    _token.value = '';
+    _isLogin.value = false;
+    await _storage.remove('token');
+  }
+}
+```
+
+### store/config.dart
+
+```dart
+part of 'store.dart';
+
+class ConfigStore extends GetxController {
+  static ConfigStore get to => Get.find();
+
+  final _storage = Get.find<StorageService>();
+
+  // 应用配置
+  final _isDarkMode = false.obs;
+  bool get isDarkMode => _isDarkMode.value;
+
+  @override
+  void onInit() {
+    super.onInit();
+    _loadConfig();
+  }
+
+  // 加载配置
+  void _loadConfig() {
+    final isDark = _storage.get<bool>('isDarkMode') ?? false;
+    _isDarkMode.value = isDark;
+  }
+
+  // 切换主题
+  Future<void> toggleTheme() async {
+    _isDarkMode.value = !_isDarkMode.value;
+    await _storage.set('isDarkMode', _isDarkMode.value);
+  }
+}
+```
+
+## 7. 工具类模板
+
+### utils/index.dart
+
+```dart
+library utils;
+
+export 'constants.dart';
+export 'logger.dart';
+```
+
+### utils/constants.dart
+
+```dart
+class Constants {
+  // API相关
+  static const String apiBaseUrl = 'https://api.example.com';
+
+  // 存储Key
+  static const String storageToken = 'token';
+  static const String storageUser = 'user';
+
+  // 其他常量
+  static const int pageSize = 20;
+}
+```
+
+### utils/logger.dart
+
+```dart
+import 'package:flutter/foundation.dart';
+
+/// 日志打印帮助类
+///
+/// 提供统一的日志打印接口，支持不同级别的日志输出
+/// 在 debug 模式下会打印日志，release 模式下不会打印
+class Logger {
+  /// 日志级别枚举
+  static const int _levelDebug = 0;
+  static const int _levelInfo = 1;
+  static const int _levelWarning = 2;
+  static const int _levelError = 3;
+
+  /// 当前日志级别（默认只显示 info 及以上级别）
+  static int _currentLevel = _levelDebug;
+
+  /// 是否启用日志（默认在 debug 模式下启用）
+  static bool _enabled = kDebugMode;
+
+  /// 设置日志级别
+  ///
+  /// [level] 日志级别：0=debug, 1=info, 2=warning, 3=error
+  static void setLevel(int level) {
+    _currentLevel = level;
+  }
+
+  /// 启用/禁用日志
+  static void setEnabled(bool enabled) {
+    _enabled = enabled;
+  }
+
+  /// 打印 Debug 级别日志
+  ///
+  /// [message] 日志消息
+  /// [tag] 日志标签，用于分类
+  /// [error] 错误对象（可选）
+  /// [stackTrace] 堆栈跟踪（可选）
+  static void debug(
+    dynamic message, {
+    String? tag,
+    Object? error,
+    StackTrace? stackTrace,
+  }) {
+    _log(_levelDebug, message, tag: tag, error: error, stackTrace: stackTrace);
+  }
+
+  /// 打印 Info 级别日志
+  ///
+  /// [message] 日志消息
+  /// [tag] 日志标签，用于分类
+  /// [error] 错误对象（可选）
+  /// [stackTrace] 堆栈跟踪（可选）
+  static void info(
+    dynamic message, {
+    String? tag,
+    Object? error,
+    StackTrace? stackTrace,
+  }) {
+    _log(_levelInfo, message, tag: tag, error: error, stackTrace: stackTrace);
+  }
+
+  /// 打印 Warning 级别日志
+  ///
+  /// [message] 日志消息
+  /// [tag] 日志标签，用于分类
+  /// [error] 错误对象（可选）
+  /// [stackTrace] 堆栈跟踪（可选）
+  static void warning(
+    dynamic message, {
+    String? tag,
+    Object? error,
+    StackTrace? stackTrace,
+  }) {
+    _log(_levelWarning, message, tag: tag, error: error, stackTrace: stackTrace);
+  }
+
+  /// 打印 Error 级别日志
+  ///
+  /// [message] 日志消息
+  /// [tag] 日志标签，用于分类
+  /// [error] 错误对象（可选）
+  /// [stackTrace] 堆栈跟踪（可选）
+  static void error(
+    dynamic message, {
+    String? tag,
+    Object? error,
+    StackTrace? stackTrace,
+  }) {
+    _log(_levelError, message, tag: tag, error: error, stackTrace: stackTrace);
+  }
+
+  /// 内部日志打印方法
+  static void _log(
+    int level,
+    dynamic message, {
+    String? tag,
+    Object? error,
+    StackTrace? stackTrace,
+  }) {
+    if (!_enabled || level < _currentLevel) {
+      return;
+    }
+
+    final levelName = _getLevelName(level);
+    final timestamp = DateTime.now().toString().substring(11, 19);
+    final tagStr = tag != null ? '[$tag]' : '';
+    final prefix = '[$timestamp] [$levelName]$tagStr';
+
+    if (error != null) {
+      debugPrint('$prefix $message');
+      debugPrint('Error: $error');
+      if (stackTrace != null) {
+        debugPrint('StackTrace: $stackTrace');
+      }
+    } else {
+      debugPrint('$prefix $message');
+    }
+  }
+
+  /// 获取日志级别名称
+  static String _getLevelName(int level) {
+    switch (level) {
+      case _levelDebug:
+        return 'DEBUG';
+      case _levelInfo:
+        return 'INFO';
+      case _levelWarning:
+        return 'WARNING';
+      case _levelError:
+        return 'ERROR';
+      default:
+        return 'UNKNOWN';
+    }
+  }
+
+  /// 打印对象（用于调试）
+  ///
+  /// [obj] 要打印的对象
+  /// [tag] 日志标签
+  static void printObject(dynamic obj, {String? tag}) {
+    if (!_enabled) return;
+    final tagStr = tag != null ? '[$tag]' : '';
+    debugPrint('$tagStr ${obj.toString()}');
+  }
+
+  /// 打印 JSON 数据（格式化输出）
+  ///
+  /// [json] JSON 数据
+  /// [tag] 日志标签
+  static void printJson(dynamic json, {String? tag}) {
+    if (!_enabled) return;
+    final tagStr = tag != null ? '[$tag]' : '';
+    try {
+      // 简单的 JSON 格式化（如果需要更复杂的格式化，可以使用 dart:convert）
+      debugPrint('$tagStr JSON: $json');
+    } catch (e) {
+      debugPrint('$tagStr Failed to print JSON: $e');
+    }
+  }
+}
+```
+
+**使用示例：**
+
+```dart
+import 'package:your_project/utils/index.dart';
+
+// 基本使用
+Logger.debug('这是一条调试信息', tag: 'UserService');
+Logger.info('用户登录成功', tag: 'Auth');
+Logger.warning('网络请求超时', tag: 'HttpService');
+Logger.error('登录失败', tag: 'Auth', error: exception);
+
+// 打印对象
+Logger.printObject(userData, tag: 'UserData');
+
+// 打印 JSON
+Logger.printJson(responseData, tag: 'API Response');
+
+// 配置日志级别（只显示 warning 及以上）
+Logger.setLevel(Logger._levelWarning);
+
+// 禁用日志（release 模式下自动禁用）
+Logger.setEnabled(false);
+```
+
+**注意事项：**
+- 默认只在 debug 模式下启用日志，release 模式下自动禁用
+- 支持不同级别的日志：debug、info、warning、error
+- 可以通过 `setLevel()` 设置日志级别，过滤低级别日志
+- 支持标签分类，方便在大量日志中快速定位
+- 支持错误对象和堆栈跟踪打印
+- 使用 `debugPrint` 而不是 `print`，避免在 release 模式下输出
+
+## 8. 页面模板
+
+### pages/main/index.dart
+
+```dart
+library main_page;
+
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+
+part 'view.dart';
+part 'controller.dart';
+```
+
+### pages/main/view.dart
+
+```dart
+part of 'main_page';
+
+class MainPage extends GetView<MainController> {
+  const MainPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    Get.put(MainController());
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('主页'),
+      ),
+      body: const Center(
+        child: Text('Hello World'),
+      ),
+    );
+  }
+}
+```
+
+### pages/main/controller.dart
+
+```dart
+part of 'main_page';
+
+class MainController extends GetxController {
+  @override
+  void onInit() {
+    super.onInit();
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    // 初始化逻辑
+  }
+
+  @override
+  void onClose() {
+    super.onClose();
+  }
+}
+```
+
+## 9. Widget模板
+
+### widgets/index.dart
+
+```dart
+library widgets;
+
+export 'button.dart';
+export 'toast.dart';
+```
+
+### widgets/toast.dart
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:bot_toast/bot_toast.dart';
+
+class CustomToast {
+  static TransitionBuilder init({
+    required BuildContext context,
+    required TransitionBuilder builder,
+  }) {
+    return BotToastInit()(context, builder);
+  }
+
+  static void text(String text) {
+    BotToast.showText(text: text);
+  }
+
+  static void success(String text) {
+    BotToast.showText(text: text);
+  }
+
+  static void error(String text) {
+    BotToast.showText(text: text);
+  }
+
+  static void loading([String? text]) {
+    BotToast.showLoading();
+  }
+
+  static void dismiss() {
+    BotToast.closeAllLoading();
+  }
+}
+```
+
+## 10. pubspec.yaml 基础依赖
+
+```yaml
+name: your_project
+description: A new Flutter project
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # 状态管理
+  get: ^4.6.6
+  get_storage: ^2.1.1
+
+  # 路由
+  go_router: ^13.0.0
+
+  # 网络请求
+  dio: ^5.4.0
+
+  # 屏幕适配
+  flutter_screenutil: ^5.9.0
+
+  # 提示组件
+  bot_toast: ^4.1.3
+
+  # 应用信息
+  package_info_plus: ^5.0.0
+
+  # 桌面窗口管理
+  window_manager: ^0.3.7
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+```
+
+## 11. 目录结构导出文件
+
+### apis/index.dart
+
+```dart
+library apis;
+
+export 'user.dart';
+export 'config.dart';
+```
+
+### components/index.dart
+
+```dart
+library components;
+
+// 业务组件导出
+```
+
+### enums/index.dart
+
+```dart
+library enums;
+
+// 枚举导出
+```
+
+### models/index.dart
+
+```dart
+library models;
+
+export 'params/index.dart';
+export 'responses/index.dart';
+```
+
+### plugins/index.dart
+
+```dart
+library plugins;
+
+// 插件导出
+```
+
+## 检查清单
+
+生成项目后，检查以下内容：
+
+- [ ] 项目目录结构完整
+- [ ] main.dart 包含适配、主题、国际化配置
+- [ ] theme.dart 包含基础颜色定义
+- [ ] 路由框架完整（router、name、observers）
+- [ ] 服务层完整（http、storage、event）
+- [ ] 状态管理完整（user、config）
+- [ ] 工具类完整（constants、logger）
+- [ ] 页面模板完整（使用part/part of机制）
+- [ ] pubspec.yaml 依赖配置正确
+- [ ] 所有index.dart导出文件存在
+- [ ] **Android 包名配置一致**：
+  - [ ] `build.gradle.kts` 中的 `namespace` 和 `applicationId` 一致
+  - [ ] `MainActivity.kt` 中的 `package` 声明与包名一致
+  - [ ] `AndroidManifest.xml` 中包含正确的 `package` 属性
+  - [ ] MainActivity.kt 文件路径与包名匹配
+- [ ] **part 文件配置正确**：
+  - [ ] 所有 part 文件使用完整包路径：`part of 'package:project_name/...'`
+  - [ ] `index.dart` 中 export 指令在 part 指令之前
+  - [ ] part 文件顺序正确（controller 在前，view 在后）
+  - [ ] 所有 part 文件能正确访问主文件导入的类型
+- [ ] **导入和引用正确**：
+  - [ ] 所有使用 `GetxController` 的文件所在主文件导入了 `package:get/get.dart`
+  - [ ] 所有使用 `GetStorage` 的文件所在主文件导入了 `package:get_storage/get_storage.dart`
+  - [ ] 所有使用 `Dio` 的文件所在主文件导入了 `package:dio/dio.dart`
+  - [ ] `CustomToast` 中 `BotToastInit` 使用方式正确
+  - [ ] 没有未使用的导入和变量
+- [ ] 运行 `flutter analyze` 检查无错误
+- [ ] 项目可以正常编译运行
+
+## 使用说明
+
+1. **创建新项目时**：使用此规则生成基础代码结构
+2. **修改配置**：根据实际项目需求修改：
+   - 修改 `your_project` 为实际项目名
+   - 修改 API baseUrl
+   - 修改应用名称和版本号
+   - 添加或删除依赖包
+3. **扩展功能**：在基础结构上添加新的页面、API、模型等
+4. **保持一致性**：新增代码遵循相同的目录结构和命名规范
+
+## 注意事项
+
+1. **命名规范**：
+   - 目录和文件：`snake_case`（小写下划线）
+   - 类名：`PascalCase`（大驼峰）
+   - 变量和函数：`camelCase`（小驼峰）
+
+2. **目录组织和 part 文件使用**：
+   - 使用 `part/part of` 机制组织模块文件
+   - 每个模块有独立的 `index.dart` 作为入口
+   - 相关文件放在同一目录下
+   - **part of 声明规范**：
+     - 必须使用完整包路径：`part of 'package:project_name/path/to/index.dart';`
+     - 不能使用相对路径或简写形式（如 `part of 'index.dart'` 或 `part of 'module_name'`）
+     - 示例：
+       ```dart
+       // ✅ 正确
+       part of 'package:solfeggio/services/index.dart';
+       part of 'package:solfeggio/store/index.dart';
+       part of 'package:solfeggio/pages/main/index.dart';
+
+       // ❌ 错误
+       part of 'services.dart';
+       part of 'store.dart';
+       part of 'main_page';
+       ```
+   - **part 文件顺序**：
+     - 在 `index.dart` 中，`part` 指令的顺序应该按照依赖关系排列
+     - 通常先声明基础类型（controller），再声明使用它们的文件（view）
+     - 示例：
+       ```dart
+       part 'controller.dart';  // 先声明
+       part 'view.dart';        // 后声明（view 可能依赖 controller）
+       ```
+
+3. **平台支持**：
+   - 代码支持移动端和桌面端
+   - 使用 `Platform.isDesktop` 判断平台
+   - 桌面端使用不同的设计尺寸
+
+4. **状态管理**：
+   - 使用 GetX 进行状态管理
+   - 全局状态放在 store 目录
+   - 页面状态放在对应的 controller
+
+5. **路由配置**：
+   - 使用 go_router 进行路由管理
+   - 路由名称统一在 RouteName 中定义
+   - 支持路由守卫和重定向
+
+6. **主题配置**：
+   - 使用 ColorScheme 定义颜色
+   - 支持亮色和暗色主题
+   - 统一的字体和间距定义
+
+7. **Android 包名配置**：
+   - **必须保持一致性**：以下文件中的包名必须完全一致
+     - `android/app/build.gradle.kts` 中的 `namespace` 和 `applicationId`
+     - `android/app/src/main/kotlin/com/xxx/xxx/MainActivity.kt` 中的 `package` 声明
+     - `android/app/src/main/AndroidManifest.xml` 中的 `package` 属性
+   - **包名格式**：使用反向域名格式，如 `com.soul.solfeggio`
+   - **修改包名步骤**：
+     1. 修改 `android/app/build.gradle.kts` 中的 `namespace` 和 `applicationId`
+     2. 修改 `MainActivity.kt` 文件中的 `package` 声明
+     3. 在 `AndroidManifest.xml` 的 `<manifest>` 标签中添加或更新 `package` 属性
+     4. 确保目录结构与包名一致（如 `com/soul/solfeggio`）
+     5. 运行 `flutter clean` 清理构建缓存
+   - **常见错误**：
+     - `ClassNotFoundException: Didn't find class "xxx.MainActivity"` - 通常是包名不一致导致
+     - 检查所有配置文件中的包名是否完全一致
+     - 确保 MainActivity.kt 文件路径与包名匹配
+
+8. **导入和导出顺序规范**：
+   - **export 指令必须在 part 指令之前**：
+     ```dart
+     // ✅ 正确顺序
+     library services;
+
+     import 'package:dio/dio.dart';
+     import 'package:get/get.dart';
+
+     export 'package:dio/dio.dart' hide Headers;  // export 在前
+
+     part 'http.dart';    // part 在后
+     part 'storage.dart';
+
+     // ❌ 错误顺序
+     part 'http.dart';
+     export 'package:dio/dio.dart';  // export 不能在 part 之后
+     ```
+   - **导入顺序**：
+     1. Dart SDK 导入（如 `dart:io`）
+     2. Flutter 包导入（如 `package:flutter/material.dart`）
+     3. 第三方包导入（如 `package:get/get.dart`）
+     4. 项目内部导入（如 `package:solfeggio/services/index.dart`）
+   - **part 文件中的类型访问**：
+     - part 文件可以访问主文件（index.dart）中导入的所有类型
+     - 确保主文件正确导入了所有需要的包
+     - 示例：
+       ```dart
+       // services/index.dart
+       import 'package:dio/dio.dart';
+       import 'package:get/get.dart';
+       part 'http.dart';
+
+       // services/http.dart
+       part of 'package:solfeggio/services/index.dart';
+
+       class HttpService extends GetxService {  // ✅ 可以访问 GetxService
+         late final Dio dio;  // ✅ 可以访问 Dio
+       }
+       ```
+
+9. **GetX 相关类型引用**：
+   - **GetxController 和 GetxService**：
+     - 确保使用 `GetxController` 的文件所在的主文件导入了 `package:get/get.dart`
+     - 示例：
+       ```dart
+       // store/index.dart
+       import 'package:get/get.dart';  // ✅ 必须导入
+       part 'user.dart';
+
+       // store/user.dart
+       part of 'package:solfeggio/store/index.dart';
+
+       class UserStore extends GetxController {  // ✅ 可以访问
+         static UserStore get to => Get.find();  // ✅ 可以访问 Get
+       }
+       ```
+   - **GetStorage**：
+     - 确保主文件导入了 `package:get_storage/get_storage.dart`
+     - 示例：
+       ```dart
+       // services/index.dart
+       import 'package:get_storage/get_storage.dart';  // ✅ 必须导入
+       part 'storage.dart';
+
+       // services/storage.dart
+       part of 'package:solfeggio/services/index.dart';
+
+       class StorageService extends GetxService {
+         late final GetStorage _box;  // ✅ 可以访问 GetStorage
+       }
+       ```
+   - **Dio 相关类型**：
+     - 确保主文件导入了 `package:dio/dio.dart`
+     - 注意：如果主文件使用了 `hide Response, FormData, MultipartFile`，part 文件仍然可以访问这些类型
+     - 示例：
+       ```dart
+       // services/index.dart
+       import 'package:dio/dio.dart';
+       import 'package:get/get.dart' hide Response, FormData, MultipartFile;
+       export 'package:dio/dio.dart' hide Headers;
+       part 'http.dart';
+
+       // services/http.dart
+       part of 'package:solfeggio/services/index.dart';
+
+       class HttpService extends GetxService {
+         late final Dio dio;  // ✅ 可以访问 Dio
+         Future<Response<T>> get<T>(...) {  // ✅ 可以访问 Response
+         }
+       }
+       ```
+
+10. **BotToast 使用规范**：
+    - **BotToastInit 正确用法**：
+      ```dart
+      // ✅ 正确用法
+      static TransitionBuilder init({
+        required BuildContext context,
+        required TransitionBuilder builder,
+      }) {
+        return (context, child) {
+          final widget = builder(context, child);
+          return BotToastInit()(context, widget);
+        };
+      }
+
+      // ❌ 错误用法
+      return BotToastInit()(context, builder);  // 缺少正确的组合
+      ```
+    - **在 main.dart 中使用**：
+      ```dart
+      builder: (context, child) {
+        return MediaQuery(
+          data: MediaQuery.of(context),
+          child: Builder(
+            builder: (innerContext) {
+              ScreenUtil.init(innerContext, ...);
+
+              return CustomToast.init(
+                context: innerContext,
+                builder: (context, child) => MediaQuery(...),
+              )(innerContext, child);  // ✅ 正确调用
+            },
+          ),
+        );
+      }
+      ```
+
+11. **代码清理规范**：
+    - 删除未使用的导入
+    - 删除未使用的变量
+    - 使用 `flutter analyze` 检查代码问题
+    - 运行 `read_lints` 工具验证修复结果

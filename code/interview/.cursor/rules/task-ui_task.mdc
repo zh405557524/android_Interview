@@ -1,0 +1,671 @@
+---
+description: UI处理任务规则
+globs: "lib/**/*.dart,pubspec.yaml,test/**/*.dart,.cursor/rules/**/*.mdc"
+alwaysApply: false
+---
+
+# UI处理任务规则
+
+> 本规则适用于所有模块的**日常 UI 代码生成和优化**场景，不局限于项目初始化或新功能骨架搭建。
+> 本规则**自动继承《新功能模块创建专用代码生成规则》中"3. 细致代码规则"**，如有冲突，以本文件为准。
+
+## 项目 UI 前置规则
+
+### 1. Figma 前置规则
+
+进入任何 UI 编码前，必须先确认 Figma 是否可通信。
+
+- 如果 Figma 已连接，读取对应 frame 后再编码。
+- 如果 Figma 未连接或读取失败，必须暂停并向用户确认。
+- 不允许在不知道 UI 的情况下凭空写完整页面。
+
+当前 Figma channel：`c7yon7jm`
+
+### 2. UI 真源优先级
+
+1. Figma Page 1 当前 frame。
+2. 项目需求引用索引 `01-需求/references/README.md`。
+3. 项目 PRD `01-需求/requirements.md`。
+4. 模块开发文档。
+
+### 3. 页面 frame 对应
+
+| 模块 | Frame |
+|------|-------|
+| 创作首页 | `1:730` / `1` |
+| 权益不足 | `1:951` / `2` |
+| 积分确认 | `1:1219` / `3` |
+| 作品空态 | `1:1542` / `4` |
+| 作品列表 | `1:1784` / `5` |
+| 我的页 | `1:318` / `6` |
+| VIP 会员 | `1:2055` / `7` |
+| 积分充值 | `1:2170` / `8` |
+| 积分详情 | `1:2694` / `9` |
+| 一键登录 | `1:620` / `10` |
+| 验证码登录 | `1:676` / `11` |
+| 创建默认态 | `1:2745` / `12` |
+| 已选视频态 | `1:2866` / `13` |
+| 风格弹层 | `1:3601` / `14`、`1:3053` / `15` |
+| 配音角色弹层 | `1:3352` / `16` |
+| 创作更多设置 | `1:3203` / `17` |
+| 选择上传视频 | `1:151` / `18` |
+| 作品详情 | `1:538` / `19` |
+| 删除确认 | `1:19` / `20` |
+
+### 4. 缺失页处理
+
+邀请好友、更多设置、意见反馈当前无独立 Figma 页面。实现前按 PRD 和模块文档先做页面结构；若用户补 Figma，再对稿修订。
+
+### 5. UI 实现要求
+
+- 深色背景。
+- 黄绿色用于主 CTA 和高亮。
+- 设计基准 `375 x 812`。
+- 使用 `flutter_screenutil`，尺寸统一 `.w`、`.h`、`.sp`、`.r`。
+- 页面按 UI 从上到下拆区块。
+- 必须覆盖 loading、empty、error、disabled、submitting。
+- 页面根节点统一使用 `CustomScaffold`。
+- `CustomScaffold` 只允许使用 `appBar`、`body`、`bottomNavigationBar`、`backgroundColor`、`backgroundImage`、`extendBodyBehindAppBar`、`resizeToAvoidBottomInset`、`primaryColor` 等新参数。
+- 不再使用 `title`、`showAppBar`、`safeArea` 旧参数；需要标题时显式传 `appBar: AppBar(...)`，需要安全区时在 `body` 内自行包 `SafeArea`。
+- 页面顶部如果包含标题、返回按钮或右侧操作按钮，必须使用 `CustomScaffold.appBar: AppBar(...)`，禁止在 `body` 中用固定高度 `SizedBox + Stack` 手写顶部栏。
+- 图片资源必须显式设置 `fit: BoxFit.contain`，包括 `Image.asset`、`Image.network` 和 `DecorationImage`。
+
+## UI修改流程
+
+### 1. 理解设计要求
+- 查看设计稿或需求描述
+- 理解UI的交互逻辑
+- 识别需要使用的组件
+- 确定样式和布局要求
+
+### 2. 组件选择
+- 优先使用项目现有的组件（`lib/components/` 和 `lib/widgets/`）
+- 查看是否有可复用的UI组件
+- 如果不存在，考虑创建可复用的组件
+- 遵循项目的UI设计规范
+
+### 3. 布局原则
+- 使用 Flutter 的布局组件（Row, Column, Stack, Flex等）
+- 保持响应式设计，适配不同屏幕尺寸
+- 使用适当的间距和边距
+- 保持UI的一致性
+
+### 4. 样式规范
+- 使用项目主题（`lib/theme.dart`）
+- 颜色、字体、间距使用主题定义的值
+- 保持与现有UI风格一致
+- 遵循 Material Design 或项目设计规范
+
+### 5. 状态管理
+- UI状态使用 GetX Controller 管理
+- 使用 `Obx` 或 `GetBuilder` 实现响应式更新
+- 避免在 Widget 中直接管理复杂状态
+
+## UI调整流程（修复与设计稿的差异）
+
+当第一次生成的UI与设计稿差距过大，需要进行调整时，按照以下流程进行：
+
+### 1. 分析背景颜色
+- **检查页面背景色**：对比设计稿中的页面背景颜色
+- **检查容器背景色**：对比卡片、容器等组件的背景颜色
+- **使用主题颜色**：优先使用 `Theme.of(context).colorScheme` 中的颜色
+- **使用自定义颜色**：如需要，使用 `CustomTheme` 中定义的颜色常量
+- **确保一致性**：确保所有背景颜色与设计稿一致
+
+### 2. 分析字体颜色
+- **检查主文字颜色**：对比设计稿中的主要文字颜色
+- **检查次要文字颜色**：对比设计稿中的次要文字、提示文字颜色
+- **检查强调文字颜色**：对比设计稿中的强调、链接等文字颜色
+- **使用主题颜色**：优先使用 `Theme.of(context).colorScheme.onSurface` 等主题颜色
+- **确保可读性**：确保文字颜色与背景色有足够的对比度
+
+### 3. 区域划分对比
+- **按区域划分**：将UI按照功能区域划分（如：标题栏、内容区、操作区等）
+- **逐个区域对比**：一个部分一部分地对比设计稿与当前实现的差异
+- **记录差异点**：记录每个区域的差异（颜色、尺寸、间距、布局等）
+- **逐一修复**：按照区域顺序，逐一修复差异
+
+### 4. 当前效果对比（如有提供）
+- **查看当前效果**：如果用户提供了当前UI的截图或描述，仔细查看
+- **对比设计稿**：将当前效果与设计稿进行详细对比
+- **识别差异**：识别所有不一致的地方（颜色、尺寸、布局、间距等）
+- **修复差异**：针对每个差异点进行修复
+
+### 5. 图标和复杂图形处理
+- **图标处理**：如有图标，**默认视为使用本地图片资源**
+  - 使用 `AssetImages.xxx` 引用
+  - 在 `AssetImages` 类中添加对应常量定义
+  - 格式：`static const String icon_xxx = 'assets/images/icon_xxx.png';//图标说明`
+- **复杂图形处理**：如需代码实现的复杂图形，**等待用户额外说明**
+  - 不要自行尝试实现复杂的图形
+  - 如果用户明确要求代码实现，再进行处理
+- **简单图形**：简单的几何图形（如圆形、矩形等）可以直接用代码实现
+
+### 6. 其他修复方法
+- **尺寸调整**：检查所有尺寸是否使用适配单位（`.w`、`.h`、`.sp`、`.r`）
+- **间距调整**：检查元素之间的间距是否与设计稿一致
+- **圆角调整**：检查圆角半径是否与设计稿一致
+- **阴影效果**：检查是否有阴影效果，是否与设计稿一致
+- **边框处理**：检查是否有边框，颜色和宽度是否一致
+- **对齐方式**：检查文字、图标等的对齐方式是否一致
+- **字体大小**：检查字体大小是否与设计稿一致
+- **字体粗细**：检查字体粗细（FontWeight）是否与设计稿一致
+- **布局结构**：检查整体布局结构是否与设计稿一致
+
+### 调整检查清单
+
+UI调整完成后，检查以下项目：
+
+- [ ] 背景颜色与设计稿一致
+- [ ] 字体颜色与设计稿一致
+- [ ] 所有区域已逐个对比并修复
+- [ ] 当前效果（如有）已与设计稿对比并修复
+- [ ] 图标已使用本地图片资源（AssetImages）
+- [ ] 复杂图形已按用户说明处理
+- [ ] 尺寸使用了适配单位（`.w`、`.h`、`.sp`、`.r`）
+- [ ] 间距与设计稿一致
+- [ ] 圆角、阴影、边框等细节与设计稿一致
+- [ ] 布局结构与设计稿一致
+
+## 组件使用规则
+
+### 2.1 Text 组件
+
+- 使用 `Text` 组件时，需添加 `style` 属性，确保字体大小、颜色符合设计规范。
+- color 优先使用 `color: Theme.of(context).colorScheme.xxxx`。如果没有对应颜色，则使用 `Color('0xxxxxxx')`。
+- 已定义的颜色：
+  ```dart
+  const scheme = ColorScheme.light(
+    // 页面背景色
+    surface: Color(0xFFF6F6F6),
+    // 页面上的文字颜色
+    onSurface: Color(0xFF333333),
+    // 卡片颜色
+    surfaceContainer: Colors.white,
+    primary: primary,
+    onPrimary: Color(0xFFF6F9FF),
+    onSecondary: Color(0xFF999999),
+    outline: Color(0xFFF6F6F6),
+    error: error,
+    onError: Colors.white,
+  )
+  ```
+- 示例：`Text('示例文本', style: TextStyle(fontSize: 16, color: Colors.black 或者 Theme.of(context).colorScheme.onSurface))`
+
+### 2.2 Button 组件
+
+- 优先使用自定义的按钮组件 `CustomButton`。
+
+```dart
+const CustomButton({
+  super.key,
+  required this.child,
+  this.foregroundColor,
+  this.backgroundColor,
+  this.type = CustomButtonType.filled,
+  this.size = CustomButtonSize.medium,
+  this.radius,
+  this.width,
+  this.height,
+  this.fontSize,
+  this.padding,
+  this.onPressed,
+  this.backgroundGradientColor,
+  this.applyOpacity = false, // 默认不应用透明度
+});
+```
+
+使用示例：
+```dart
+CustomButton(
+  height: 58.h,
+  size: CustomButtonSize.small,
+  backgroundGradientColor: [Color(0xff57DDFF), Color(0xff0861FD)],
+  radius: 12.h,
+  onPressed: () {
+    context.pushNamed(RouteName.smartStoryboardUpload);
+  },
+  child: Text(
+    '开始创作',
+    style: TextStyle(fontSize: 16.sp, color: Colors.white),
+  ),
+)
+```
+
+### 2.3 CustomToast 使用规则
+
+- 错误提示使用 `CustomToast.fail()`，**禁止使用 `CustomToast.error()`**
+- 加载提示使用 `CustomToast.loading()`，**禁止使用 `CustomToast.showLoading()`
+
+**正确用法**：
+```dart
+// ✅ 正确：错误提示
+CustomToast.fail('获取灵感失败：${e.toString()}');
+
+// ✅ 正确：加载提示
+CustomToast.loading('加载中...');
+
+// ✅ 正确：成功提示
+CustomToast.success('操作成功');
+
+// ✅ 正确：文本提示
+CustomToast.text('提示信息');
+
+// ✅ 正确：关闭提示
+CustomToast.dismiss();
+```
+
+**错误用法**：
+```dart
+// ❌ 错误：不存在 error 方法
+CustomToast.error('错误信息');
+
+// ❌ 错误：不存在 showLoading 方法
+CustomToast.showLoading();
+```
+
+### 2.4 颜色使用规则
+
+- **禁止直接使用 `Colors.xxx.withOpacity(...)`**
+  - 从 Flutter 3.27 开始，`withOpacity()` 已被标记为 @Deprecated，官方建议使用 `.withValues(alpha: ...)` 以避免精度损失。
+
+- 固定透明度的颜色，必须使用 **常量写法**：
+  ```dart
+  const Color(0x99000000) // ARGB 写法，0x99 ≈ 60% 透明
+  const Color.fromRGBO(0, 0, 0, 0.6) // fromRGBO 写法
+  ```
+
+- 动态透明度的颜色，必须使用：
+  ```dart
+  Colors.black.withValues(alpha: controller.opacity.value)
+  ```
+
+- 推荐：
+  - 常量透明度 → 用 `const Color(...)`（可编译期确定，性能更优）
+  - 运行时透明度 → 用 `.withValues(alpha: ...)`
+
+## 尺寸适配方案
+
+为了保证 UI 在不同屏幕分辨率和屏幕密度下均匀缩放，项目统一采用以下扩展单位进行尺寸适配：
+
+| 单位  | 说明                         | 使用场景                 |
+|-------|------------------------------|--------------------------|
+| `.w`  | 宽度适配，基于屏幕宽度比例缩放 | 用于宽度尺寸、水平间距     |
+| `.h`  | 高度适配，基于屏幕高度比例缩放 | 用于高度尺寸、垂直间距     |
+| `.sp` | 字体大小适配，考虑字体缩放和屏幕密度 | 用于字体大小             |
+| `.r`  | 圆角适配，基于屏幕尺寸比例缩放 | 用于圆角半径               |
+
+**使用要求：**
+- **宽度** → 必须使用 `.w`
+- **高度** → 必须使用 `.h`
+- **圆角** → 必须使用 `.r`
+- **文字** → 必须使用 `.sp`
+
+**示例：**
+```dart
+width: 100.w,
+height: 56.h,
+borderRadius: BorderRadius.circular(12.r),
+fontSize: 14.sp,
+```
+
+## 视图与 Controller 联动修改规则
+
+- 当对 view 层（如页面、组件）中调用的 controller 方法或业务逻辑进行修改时，**请务必同步检查并调整对应的 controller 实现**，确保 UI 与业务逻辑保持一致。
+- 若无法直接定位或不确定 controller 所在文件，请优先在本模块的 `index.dart` 文件中查找 controller 的 part 声明或 import 路径，确保修改范围准确。
+- 禁止只在 view 层做"临时 patch"或绕过 controller 的业务改动，必须自下而上调整逻辑，保证职责分明、维护性强。
+- 推荐所有涉及 UI 和 controller 交互的改动，都在提交备注或 PR 中明确标注，方便代码审核和后期回溯。
+
+> 这样能确保每一次界面和业务的变更，都是双向同步、结构合理的。
+
+## Context 获取规范（重要）
+
+- **禁止在 Controller 中使用 `Get.context` 获取 context**，`Get.context` 可能无法可靠获取到正确的 context。
+- **推荐方式**：通过方法参数传递 context，或使用 View 层的 context。
+
+**错误示例：**
+```dart
+// ❌ 错误：使用 Get.context
+if (Get.context != null) {
+  Get.context!.go('/'); // ❌ 禁止
+}
+```
+
+**正确示例：**
+```dart
+// ✅ 正确：通过参数传递 context
+void enterApp(BuildContext context) {
+  context.go('/');
+}
+
+// ✅ 正确：在 View 层使用 context
+@override
+void initState() {
+  super.initState();
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted && context.mounted) {
+        context.go('/');
+      }
+    });
+  });
+}
+```
+
+## 本地图片资源使用与命名规则
+
+- 所有本地图片资源统一使用 `Image.asset` 组件加载，并通过 `AssetImages` 工具类中的静态常量方式引用，**禁止硬编码图片路径**。
+
+- 图片引用标准写法示例：
+  ```dart
+  Image.asset(
+    AssetImages.banner1,
+    fit: BoxFit.cover,
+  )
+  ```
+
+## 资源文件命名规则
+
+- 项目内所有本地资源文件（如图片、图标、音频、字体等）**必须采用统一且易于检索的英文小写下划线命名风格**。
+- 文件名应以资源类型为前缀，功能或场景名为主体。例如：
+  - 图片资源：`icon_user_avatar.png`、`banner_text_translation.png`
+  - 音频资源：`audio_success.mp3`、`effect_click.wav`
+  - 字体资源：`font_title_bold.ttf`
+- 文件名**不允许出现中文、空格、特殊字符**，仅允许英文、数字、下划线。
+- 多功能共用的资源可加功能缩写或适用场景以区分（如 `icon_share_global.png`）。
+- 项目中引用资源文件时，必须通过常量类（如 `AssetImages`、`AssetFonts` 等）进行，不允许硬编码路径。
+
+> 本规则确保所有资源命名有序、归属明确，便于自动管理、全局检索和团队协作。如新增资源类型，请同步补充命名前缀与示例。
+
+## 资源常量类生成规则（以 AssetImages 为例）
+
+- 所有本地图片资源路径，必须在 `lib/utils/assets.dart` 文件的 `AssetImages` 类中**统一以静态常量形式声明**，禁止直接在业务代码中硬编码图片路径。
+- 每新增一个图片资源文件，都要在 `AssetImages` 类中同步增加对应常量，常量命名风格须遵循[资源文件命名规则](#资源文件命名规则)。
+- 并且在代码后面注释该图片的名称
+
+**重要规则**：
+- **当生成代码中使用 `AssetImages.xxx` 时，必须在 `AssetImages` 类中同步添加对应的常量定义**
+- 格式：`static const String icon_ai = 'assets/images/icon_ai.png';//ai图标`
+- 新的图片名称不要与现有的图片名称冲突
+- 如果本地图片文件不存在，可以不管（用户会手动添加）
+
+推荐声明方式如下：
+
+  ```dart
+  class AssetImages {
+    static const String icon_send = 'assets/images/icon_send.png';//消息发送图片
+    static const String icon_ai = 'assets/images/icon_ai.png';//ai图标
+    static const String banner_text_translation = 'assets/images/banner_text_translation.png';//文本翻译
+    // ...其它图片资源
+  }
+  ```
+
+## 代码规范
+
+### Widget 组织
+- 将复杂 Widget 拆分为小部件
+- 使用 `lib/widgets/` 中的自定义组件
+- 保持 Widget 的单一职责
+- 提取可复用的 Widget
+
+### 页面结构
+- 页面文件放在 `lib/pages/` 目录
+- 使用 `index.dart` 作为桶文件导出
+- Controller 和 View 分离
+- 保持页面代码的清晰性
+
+
+## 弹框创建规则
+**必须遵循**：
+1. 弹框文件放在 `{feature_name}/dialog/{dialog_name}.dart`，使用 `part of '../index.dart'`
+2. 类名以 `Dialog` 结尾，提供静态 `show` 方法
+3. 使用 `CustomDialog.show` 创建弹框
+4. `show` 方法只接收 `BuildContext context`，禁止传递 Controller
+5. 弹框只负责收集用户输入并返回结果，业务逻辑在调用处处理
+6. 在 `show` 方法中创建 `TextEditingController`，使用 `Future.delayed` 延迟 dispose（300ms）
+
+**示例**：
+```dart
+// dialog/add_category_dialog.dart
+part of '../index.dart';
+
+// 确认弹框组件，用于显示删除确认等操作
+class ConfirmDialog extends StatelessWidget {
+  final String title;
+  final String content;
+  final String? confirmText;
+  final String? cancelText;
+  final VoidCallback? onConfirm;
+  final VoidCallback? onCancel;
+
+  const ConfirmDialog({
+    super.key,
+    required this.title,
+    required this.content,
+    this.confirmText,
+    this.cancelText,
+    this.onConfirm,
+    this.onCancel,
+  });
+
+  static Future<T?> show<T>({
+    required BuildContext context,
+    required String title,
+    required String content,
+    String? confirmText,
+    String? cancelText,
+    VoidCallback? onConfirm,
+    VoidCallback? onCancel,
+    bool barrierDismissible = true,
+  }) {
+    WakelockPlus.enable();
+    return showDialog<T>(
+      context: context,
+      barrierColor: const Color(0xB3000000), // rgba(0, 0, 0, 0.7)
+      barrierDismissible: barrierDismissible,
+      builder: (context) => PopScope(
+        canPop: barrierDismissible,
+        child: ConfirmDialog(
+          title: title,
+          content: content,
+          confirmText: confirmText,
+          cancelText: cancelText,
+          onConfirm: () {
+            Navigator.of(context).pop(true);
+            onConfirm?.call();
+          },
+          onCancel: () {
+            Navigator.of(context).pop(false);
+            onCancel?.call();
+          },
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: EdgeInsets.zero,
+      child: Container(
+        width: 305.w,
+        height: 200.h,
+        decoration: BoxDecoration(
+          color: const Color(0xFF181920), // #181920
+          borderRadius: BorderRadius.circular(20.r),
+        ),
+        child: Stack(
+          children: [
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// view.dart 中使用
+final categoryName = await AddCategoryDialog.show(context: context);
+if (categoryName != null && categoryName.isNotEmpty) {
+  await controller.addCategory(context, categoryName);
+}
+```
+
+### 样式定义
+- 使用 `lib/theme.dart` 中的主题
+- 避免硬编码颜色和尺寸
+- 使用常量定义重复使用的样式值
+- 保持样式的可维护性
+- **必须使用尺寸适配单位**（`.w`、`.h`、`.sp`、`.r`）
+
+## 检查清单
+
+UI修改完成后，检查以下项目：
+
+- [ ] UI符合设计要求
+- [ ] 在不同屏幕尺寸下正常显示
+- [ ] 使用了项目主题和样式
+- [ ] 交互逻辑正确实现
+- [ ] 状态更新正确（使用 GetX）
+- [ ] 没有硬编码的颜色/尺寸
+- [ ] **所有尺寸使用了适配单位**（`.w`、`.h`、`.sp`、`.r`）
+- [ ] **颜色使用正确**（不使用已废弃的 `withOpacity`，使用 `withValues(alpha:)` 或常量）
+- [ ] **图片资源通过 AssetImages 常量引用**（不硬编码路径）
+- [ ] **使用 AssetImages.xxx 时，已在 AssetImages 类中添加对应常量定义**
+- [ ] **CustomToast 使用正确**（使用 `fail()` 而非 `error()`，使用 `loading()` 而非 `showLoading()`）
+- [ ] **View 和 Controller 修改同步**（确保 UI 和业务逻辑一致）
+- [ ] 代码结构清晰，易于维护
+- [ ] 性能良好（避免不必要的重建）
+
+## 示例UI模式
+
+### 使用主题
+```dart
+// ❌ 错误：硬编码颜色
+Container(
+  color: Colors.blue,
+)
+
+// ✅ 正确：使用主题
+Container(
+  color: Theme.of(context).primaryColor,
+)
+```
+
+### Widget 拆分
+```dart
+// ✅ 好的做法：将复杂UI拆分为小部件
+class UserProfilePage extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Column(
+        children: [
+          _buildHeader(),
+          _buildUserInfo(),
+          _buildActionButtons(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader() { }
+  Widget _buildUserInfo() { }
+  Widget _buildActionButtons() { }
+}
+```
+
+### 响应式更新
+```dart
+// ✅ 使用 GetX 响应式更新
+class MyView extends StatelessWidget {
+  final controller = Get.find<MyController>();
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() => Text(controller.data.value));
+  }
+}
+```
+
+### 使用现有组件
+```dart
+// ✅ 优先使用项目现有组件
+import 'package:clip_flutter/widgets/custom_button.dart';
+
+CustomButton(
+  height: 58.h,
+  size: CustomButtonSize.small,
+  backgroundGradientColor: [Color(0xff57DDFF), Color(0xff0861FD)],
+  radius: 12.h,
+  onPressed: () {},
+  child: Text(
+    '提交',
+    style: TextStyle(fontSize: 16.sp, color: Colors.white),
+  ),
+)
+```
+
+### 尺寸适配示例
+```dart
+// ❌ 错误：硬编码尺寸
+Container(
+  width: 100,
+  height: 56,
+  child: Text('文本', style: TextStyle(fontSize: 14)),
+)
+
+// ✅ 正确：使用适配单位
+Container(
+  width: 100.w,
+  height: 56.h,
+  child: Text('文本', style: TextStyle(fontSize: 14.sp)),
+)
+```
+
+### 颜色使用示例
+```dart
+// ❌ 错误：使用已废弃的 withOpacity
+Container(
+  color: Colors.black.withOpacity(0.6),
+)
+
+// ✅ 正确：使用常量或 withValues
+Container(
+  color: const Color(0x99000000), // 常量透明度
+)
+// 或
+Container(
+  color: Colors.black.withValues(alpha: 0.6), // 动态透明度
+)
+```
+
+### 图片资源使用示例
+```dart
+// ❌ 错误：硬编码路径
+Image.asset('assets/images/icon_back.png')
+
+// ✅ 正确：使用 AssetImages 常量
+Image.asset(
+  AssetImages.icon_back,
+  width: 22.w,
+  height: 22.h,
+)
+
+// ✅ 同时需要在 AssetImages 类中添加：
+// static const String icon_back = 'assets/images/icon_back.png';//返回图标
+```
+
+### CustomToast 使用示例
+```dart
+// ❌ 错误：使用不存在的方法
+CustomToast.error('获取灵感失败：${e.toString()}');
+CustomToast.showLoading();
+
+// ✅ 正确：使用正确的方法
+CustomToast.fail('获取灵感失败：${e.toString()}');
+CustomToast.loading('加载中...');
+CustomToast.success('操作成功');
+CustomToast.text('提示信息');
+CustomToast.dismiss();
+```

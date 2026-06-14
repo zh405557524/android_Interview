@@ -1,0 +1,173 @@
+---
+description: 重构任务规则
+globs: "lib/**/*.dart,pubspec.yaml,test/**/*.dart,.cursor/rules/**/*.mdc"
+alwaysApply: false
+---
+
+# 重构任务规则
+
+## 重构流程
+
+### 1. 理解现有代码
+- 完整阅读需要重构的代码
+- 理解代码的当前功能和设计意图
+- 识别代码的问题和改进点
+- 分析代码的依赖关系
+
+### 2. 重构目标
+- 提高代码可读性
+- 减少代码重复
+- 改善代码结构
+- 提高可维护性
+- 优化性能（如需要）
+
+### 3. 重构原则
+- **小步重构**：每次只重构一小部分
+- **保持功能不变**：重构不应该改变功能行为
+- **测试驱动**：确保重构后功能正常
+- **向后兼容**：不破坏现有接口
+
+### 4. 重构类型
+- **提取方法**：将长方法拆分为小方法
+- **提取类**：将大类拆分为小类
+- **重命名**：使用更清晰的命名
+- **消除重复**：提取公共代码
+- **简化条件**：简化复杂的条件逻辑
+
+### 5. 验证
+- 确保重构后功能正常
+- 检查是否有性能影响
+- 验证代码可读性提升
+- 确保没有引入新问题
+
+## 代码规范
+
+### 方法提取
+- 每个方法只做一件事
+- 方法名清晰表达意图
+- 方法长度控制在合理范围（建议不超过50行）
+
+### 类拆分
+- 遵循单一职责原则
+- 保持类的内聚性
+- 避免过大的类（建议不超过500行）
+
+### 命名优化
+- 使用有意义的名称
+- 避免缩写（除非是通用缩写）
+- 保持命名一致性
+
+### 代码组织
+- 相关代码放在一起
+- 使用适当的注释
+- 保持代码的层次结构
+
+## 检查清单
+
+重构完成后，检查以下项目：
+
+- [ ] 功能行为没有改变
+- [ ] 代码可读性提升
+- [ ] 代码结构更清晰
+- [ ] 没有引入新问题
+- [ ] 性能没有下降
+- [ ] 代码符合项目规范
+- [ ] 相关文档已更新（如需要）
+
+## 示例重构模式
+
+### 提取方法
+```dart
+// ❌ 重构前：长方法
+void processOrder() {
+  // 验证订单
+  if (order.items.isEmpty) {
+    throw Exception('订单为空');
+  }
+  if (order.total < 0) {
+    throw Exception('订单金额无效');
+  }
+
+  // 处理支付
+  final payment = processPayment(order.total);
+  if (!payment.success) {
+    throw Exception('支付失败');
+  }
+
+  // 更新库存
+  for (var item in order.items) {
+    updateInventory(item);
+  }
+}
+
+// ✅ 重构后：提取方法
+void processOrder() {
+  validateOrder();
+  processPayment();
+  updateInventory();
+}
+
+void validateOrder() {
+  if (order.items.isEmpty) {
+    throw Exception('订单为空');
+  }
+  if (order.total < 0) {
+    throw Exception('订单金额无效');
+  }
+}
+```
+
+### 消除重复
+```dart
+// ❌ 重构前：重复代码
+void saveUser() {
+  try {
+    final data = prepareUserData();
+    api.save(data);
+    showSuccess('保存成功');
+  } catch (e) {
+    showError('保存失败');
+  }
+}
+
+void saveProduct() {
+  try {
+    final data = prepareProductData();
+    api.save(data);
+    showSuccess('保存成功');
+  } catch (e) {
+    showError('保存失败');
+  }
+}
+
+// ✅ 重构后：提取公共逻辑
+Future<void> saveData<T>(T Function() prepareData, String successMsg) async {
+  try {
+    final data = prepareData();
+    await api.save(data);
+    showSuccess(successMsg);
+  } catch (e) {
+    showError('保存失败');
+  }
+}
+```
+
+### 简化条件
+```dart
+// ❌ 重构前：复杂条件
+if (user != null && user.isActive && user.hasPermission && user.role == 'admin') {
+  // ...
+}
+
+// ✅ 重构后：提取方法
+if (canAccessAdmin(user)) {
+  // ...
+}
+
+bool canAccessAdmin(User? user) {
+  return user != null &&
+         user.isActive &&
+         user.hasPermission &&
+         user.role == 'admin';
+}
+```

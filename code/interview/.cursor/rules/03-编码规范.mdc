@@ -1,0 +1,181 @@
+---
+description: 剧说 Flutter 编码规范
+globs: "lib/**/*.dart,test/**/*.dart"
+alwaysApply: true
+---
+
+# 03-编码规范
+
+## 1. 命名
+
+- 文件和目录：`snake_case`
+- 类和枚举：`PascalCase`
+- 变量和函数：`camelCase`
+- 路由名集中放 `RouteName`
+- 用户可见文案优先集中管理，避免散落在复杂页面里
+
+## 2. 模块组织
+
+- 页面模块默认使用 `index.dart + part / part of`。
+- 一个模块内不要混用 `part` 和本地互相 `import` 两套方式。
+- `index.dart` 负责外部 import。
+- `controller.dart` 负责页面状态和业务动作。
+- `view.dart` 负责 UI 结构。
+
+## 3. 状态管理
+
+- 页面状态放页面 Controller。
+- 跨页面状态放 `store/`。
+- 复用动作放 `services/`。
+- API 入口放 `apis/`，API 类使用 `abstract class XxxAPI` + `static` 方法。
+- Controller 禁止使用 `Get.context`。
+
+## 4. 后端待确定约束
+
+- 页面不得写死真实 API path。
+- 真实 API path 写在对应 `apis/` 静态方法内，不再通过集中 endpoint 常量分散维护。
+- `apis/` 只负责真实接口请求和 DTO / 领域模型转换，不判断 mock / real，不保存 mock 数据。
+- `ConfigStore.mockEnabled` 只能由业务 Controller 读取；Controller 决定走私有 mock 方法还是 `XxxAPI.staticMethod()`。
+- mock 数据放在对应业务 Controller 私有方法 / 私有常量中，不放在 `apis/` 和 `HttpService`。
+- 登录、支付、上传、播放、生成任务供应商未确认前只写抽象，不引入真实 SDK。
+
+## 5. 错误处理
+
+- 异步调用必须捕获异常。
+- 用户可见失败必须有 toast、错误态或可重试入口。
+- 表单提交失败必须保留用户已填写内容。
+- 关键动作必须防重复点击。
+
+## 6. 注释
+
+注释是本项目的硬性编码要求。新增或修改 Controller、Service、Store、API、Model、关键业务工具方法时，必须同步补齐 `///` 业务注释；缺少必要注释视为不符合编码规范，不能只靠代码自解释替代。
+
+### 6.1 必须写 `///` 的位置
+
+- `apis/` 内每个 API 方法：说明业务用途、候选接口路径、关键参数或返回值；私有请求封装也要说明复用原因。
+- `models/data/` 内每个 data 类：说明业务含义；**类内每个字段**写明页面或业务语义。
+- **重要方法**：对外暴露、承载主流程或含非显而易见业务规则的方法，必须使用 `///` 文档注释。
+- **重要成员变量**：类内承载页面状态、业务配置、会话数据、计时/防抖/缓存的字段，必须使用 `///` 文档注释。
+- **新增业务能力**：新增事件、服务、接口、Controller 状态、跨页面通信、登录态 / token / 配置加载 / 上传生成等流程时，必须写清楚触发场景、业务副作用和失败策略。
+
+### 6.2 哪些算「重要方法」
+
+以下方法默认视为重要方法，新增或修改时必须补注释：
+
+| 位置 | 典型方法 |
+|------|----------|
+| `lib/pages/**/controller.dart` | 页面初始化加载、提交/保存、登录登出、支付、上传、删除、跳转入口、mock/real 分支入口 |
+| `lib/services/` | `HttpService` 请求封装、存储读写、平台能力封装、全局事件分发 |
+| `lib/store/` | 登录态变更、会话持久化、跨页面共享状态写入 |
+| `lib/plugins/` | 第三方 SDK 对外暴露的初始化、鉴权、回调处理 |
+| `lib/routes/` | 路由守卫、重定向、登录回跳 |
+| `lib/utils/` | 校验器、格式化、环境/常量解析（影响运行行为的） |
+
+`view.dart` 内私有 UI 构建方法、简单 getter/setter、一眼能看懂的布局拆分，可不写注释。
+
+### 6.3 哪些算「重要成员变量」
+
+以下类中的**实例字段**（含 `final`、`.obs`、`TextEditingController`、`Timer?` 等）默认视为重要成员变量，新增或修改时必须补注释：
+
+| 位置 | 典型字段 |
+|------|----------|
+| `lib/pages/**/controller.dart` | 页面状态（loading/error/submitting）、表单控制器、倒计时、模式开关、用户操作标记 |
+| `lib/store/` | token、用户资料、积分/会员、mock 开关、API 地址等全局态 |
+| `lib/services/` | 客户端实例、缓存 key、会话/设备标识 |
+| `lib/plugins/` | SDK 配置、可用性状态、最近一次授权结果 |
+| `models/data/`、`models/params/` | 请求参数、响应 DTO、领域模型字段（**全部字段**） |
+
+方法内的**局部变量**、循环计数器、临时中间值可不写注释。
+
+### 6.4 注释写什么
+
+**方法：**
+
+- 说明**业务目的**（这个方法解决什么问题）。
+- 有分支时说明**触发条件**（mock/real、登录态、权限、供应商未接入等）。
+- 异步方法说明**副作用**（是否写 Store、是否弹 toast、是否导航）。
+
+**成员变量：**
+
+- 说明字段在页面或业务中的**含义**与**取值范围/单位**（如秒、分、布尔语义）。
+- 响应式字段说明**何时更新**、**驱动哪块 UI**。
+- 非显而易见默认值或魔法数说明**来源**（后端约定、设计稿、供应商限制）。
+
+- 不要写重复代码字面意思的注释（如 `// 设置 token` 对应 `setToken`、`// 是否登录` 对应 `isLoggedIn`）。
+- 每次提交或交付前必须自查本次新增 / 修改的业务字段和方法是否已补注释；发现缺注释先补齐，再交付。
+
+### 6.5 示例
+
+```dart
+/// 是否处于短信验证码登录面板。
+final RxBool smsMode = false.obs;
+
+/// 验证码发送冷却剩余秒数；0 表示可再次发送。
+final RxInt secondsLeft = 0.obs;
+
+/// 短信验证码登录；成功后写入 [UserStore] 并更新 [HttpService] 鉴权头。
+Future<bool> submitSms() async { ... }
+
+/// 从本地恢复会话；token 无效时清理登录态并返回 false。
+bool restoreSession() { ... }
+```
+
+## 7. Controller / UI 依赖边界
+
+- Controller 可以直接接收 `BuildContext` 并调用页面业务需要的权限、系统选择器、弹框、BottomSheet、路由和 Toast。
+- 页面根部可以创建、读取 Controller，并把 Controller 的公开业务方法包装成回调传给子组件。
+- 子 Widget、dialog、sheet、picker 禁止持有 Controller 字段，禁止把 Controller 保存为成员变量，禁止接收 Controller 对象。
+- 子 Widget、dialog、sheet、picker 禁止调用 `Get.find<.*Controller>()`；它们只接收展示值、DTO、`Rx` 状态或回调。
+- Controller 不需要通过 `View` 接口访问 UI 能力；若当前模块没有真实必要，不新增 `XxxView` 接口、`bindView`、`unbindView`。
+
+## 8. 类成员顺序
+
+类内成员按下面顺序排列；没有对应内容的区块可以省略，但已有内容不得随意穿插：
+
+1. 依赖与状态字段：Store、Service、API、`Rx` 状态、页面数据源。
+2. 私有运行态字段：当前任务、缓存、订阅、定时器、幂等键等。
+3. 静态常量与选项数据：`static const`、固定选项列表、默认值。
+4. 构造与初始化：构造函数、初始化参数。
+5. 生命周期：`onInit`、`onReady`、`onClose`、`dispose` 等。
+6. 公开 getter：供页面渲染读取的派生状态。
+7. 公开业务方法：页面事件入口、用户操作入口、业务流程编排。
+8. 私有加载 / 选择辅助方法：配置加载、默认选择、查找工具。
+9. 私有上传 / 生成辅助方法：任务创建、上传、轮询、失败处理。
+10. 私有格式化 / 错误处理辅助方法：文案格式化、异常转换、日志和提示。
+11. 内部类、私有 UI 类、typedef、extension 放在文件最下面；同文件里有多个 UI 私有类时，按页面出现顺序排列。
+
+## 9. 区块划分
+
+- 每个区块内部先放字段，再放 getter，再放方法；不要在方法之间插入无关字段。
+- 公有方法放在私有方法上方；同一个业务流程的入口、重试、核心执行方法应相邻。
+- 私有方法按调用链或业务阶段排列，优先让读者从入口往下顺着读完。
+- Controller、Store、Service、API、Model 文件里禁止混入页面私有 UI 类；页面私有 UI 类放 `pages/{feature_name}/widgets/` 或 `dialog/`。
+
+## 10. 同族方法永不分离
+
+- Dart 没有 Java 式重载，但同名 / 同族方法必须相邻，例如 `createTask`、`retryTask`、`_createTaskPayload`、`_createTaskId` 不要被无关方法隔开。
+- Getter 和它对应的写方法或选择方法保持邻近，例如 `selectedVoice`、`selectVoice`、`openVoiceSelector` 应该在同一业务区块附近。
+- 一个流程的阶段方法按真实业务顺序排列，例如创建批次、上传封面、上传视频、上报完成、等待作品创建。
+
+## 11. 注释补充规则
+
+- 注释是硬性要求：新增或修改 Controller、Store、Service、API、Model、关键业务工具方法时，必须同步写 `///` 业务注释；缺少必要注释视为不符合 Flutter 编码规范。
+- Controller、Store、Service、API、Model 的字段和方法必须写 `///` 业务语义注释，说明“这个成员在业务上代表什么”，不要写机械翻译。
+- 复杂私有方法也必须说明职责、边界或失败策略；简单 UI 私有 Widget 可以只注释类职责，不需要给每个 build 细节加注释。
+- 注释优先解释业务边界，例如“加入百度项目后才扣积分”“workId 返回即代表作品已落库”，不要重复代码字面含义。
+- 修改业务流程时，同步更新相关注释，避免注释停留在旧流程。
+- 交付前必须自查本次新增 / 修改的业务字段、方法、事件和服务是否已经补齐注释。
+
+## 12. 验证
+
+每轮编码完成至少运行：
+
+```bash
+flutter analyze
+```
+
+涉及链路或测试已存在时运行：
+
+```bash
+flutter test
+```

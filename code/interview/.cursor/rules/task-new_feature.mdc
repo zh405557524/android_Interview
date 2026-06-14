@@ -1,0 +1,793 @@
+---
+description: 新功能开发任务规则
+globs: "lib/**/*.dart,pubspec.yaml,test/**/*.dart,.cursor/rules/**/*.mdc"
+alwaysApply: false
+---
+
+# 新功能开发任务规则
+
+> ⚠️ 本规则**在"新建功能模块"时为强制遵守标准**，如：
+> "请为我新建一个 {feature_name} 功能模块，严格按 new_feature.mdc 规则生成。"
+>
+> **在日常代码开发、维护、细节优化时，本规则亦可作为重要参考，但不是唯一标准。**
+> 如遇与本规则冲突的场景，**以当前具体业务场景下更细致的专用规则为准。**
+
+## A. 项目新功能开发规则
+
+### A.1 开发顺序
+
+每个模块按以下顺序实现：
+
+1. 读取模块开发文档。
+2. 确认 Figma 连接和 UI 来源。
+3. 补模型与真实 API 静态方法。
+4. 补 Store 或 Service。
+5. 补 Controller。
+6. 补 View / Widgets / Dialog。
+7. 补 loading / empty / error / submitting / success 状态。
+8. 运行 `flutter analyze`。
+9. 运行必要测试。
+10. 回写开发记录。
+
+### A.2 当前模块顺序
+
+```text
+01 工程骨架
+02 登录主框架我的页
+03 创作流程
+04 作品模块
+05 商业化与我的二级页
+06 状态与验收
+```
+
+编码阶段不需要每个模块都停下来等确认。模块完成后继续下一个模块，直到遇到明确阻塞或用户要求暂停。
+
+### A.3 标准页面模块
+
+```text
+lib/pages/{feature}/
+├── index.dart
+├── controller.dart
+└── view.dart
+```
+
+`widgets/`、`dialog/`、子功能目录只在确实存在对应内容时创建；没有就不显示、不创建。
+
+### A.4 API 编码规则
+
+- API 层按“接口契约先行 + 真实请求封装”实现。
+- API 类使用 `abstract class XxxAPI` + `static` 方法，例如 `HomeAPI.fetchCases()`。
+- 每个 API 方法必须写 `///` 注释，说明业务用途、候选接口路径、关键参数或返回值；私有请求封装也要说明复用原因。
+- 真实接口路径直接写在对应 API 静态方法内，页面和 Widget 不写接口路径。
+- Controller 负责 mock / real 开关：读取 `ConfigStore.mockEnabled`，mock 模式调用 Controller 私有 mock 方法，real 模式调用 `XxxAPI.staticMethod()`。
+- `HttpService` 只负责真实请求、token、baseUrl、错误转换，不判断 mock / real。
+- `ConfigStore.mockEnabled` 默认开启；切到 real 后如果 `apiBaseUrl` 未配置，必须返回统一可读错误。
+- 未确认供应商 SDK 前，不直连支付、短信、一键登录、视频云、对象存储等敏感能力。
+
+### A.5 Data 类注释规则
+
+- `models/data/` 内每个 data 类必须写 `///` 类注释，说明该模型服务的页面、接口或业务场景。
+- data 类核心字段必须写 `///` 字段注释，说明字段在页面或业务中的含义。
+- 不写“id 是 id”这类重复字面意思的注释；注释要补充业务语境。
+
+### A.6 强约束
+
+- 不跳过模块文档直接发明功能。
+- 不把复杂业务写在 Widget 回调里。
+- 不使用 `Get.context`。
+- 不在页面或 Controller 写死真实 API path。
+- 不在 `apis/` 或 `HttpService` 写 mock / real 分支。
+- 不引入未确认供应商 SDK。
+
+## 0. 生成流程（务必逐步输出所有内容）
+
+### 1. 生成代码结构
+- 规则见 **1. 目录结构与命名** 和 **2. 命名规范**
+- 必须完整输出所有目录和文件清单，包括主模块、`widgets`、`dialog`、每个子模块（如 `result`、`history`）及其 `index.dart`。
+
+### 2. UI 界面生成
+- 规则见 **3. 细致代码规则** 和 **参考 UI生成规范（task-ui_task.mdc）**
+- 每个页面（`view.dart`）必须输出完整的 UI 代码，包括标题栏、主操作区、所有 UI 元素，严格参考 UI 图和交互说明。
+- 组件、弹框等也需输出完整实现。
+
+### 2.5 检查业务复用（重要）
+
+在生成UI和Controller之前，**必须检查业务复用规则**：
+- **读取** `.cursor/rules/11-业务复用规则.mdc` 了解可复用的组件和参考代码
+- 优先使用现有的UI组件（CustomButton、CustomInput等）
+- 优先使用现有的业务组件（CompClipVoiceConversionChooser等）
+- 参考相似业务的完整流程（如：小说转漫画的三步流程）
+- **注意**：该规则文件较大，但新功能开发时必须参考，确保代码质量和一致性
+
+### 3. Controller 生成
+- 规则见 **3.3 Controller 规则**
+- 每个页面、子模块都要有对应的 Controller，输出完整的响应式变量、方法、注释，并与页面强关联。
+
+### 4. 路由注册（必须输出完整代码）
+- 规则见 **3.4 路由注册与跳转规则**
+- 必须输出以下内容：
+  - `RouteName` 类中的静态常量声明（所有新页面都要加）
+  - `CustomRouter.config` 的 `GoRoute` 注册代码（每个页面都要注册，路径、`name`、`builder` 等完整）
+  - 页面跳转和参数获取的标准示例代码（如 `context.pushNamed`、`state.extra/queryParameters` 获取参数）
+  - 所有路由注册、跳转、参数传递、回传都要有标准代码示例。
+  - 代码风格、命名、路径等严格遵循 **3.4.1 路由注册规范**。
+  - 子功能遵循 **3.4.3 子路由（SubRoutes）规范**。
+
+### 5. 依赖引用
+- 规则见 **3.5 View 层依赖引用规范**
+- 所有模块文件的依赖引用都必须通过 `index.dart` 管理，禁止直接 `import` 本地其它业务文件，推荐使用 `part/part of` 机制。
+
+### 6. 子模块依赖
+- 规则见 **3.5.3 子模块依赖管理**
+- 子模块（如 `result`、`history`）必须独立组织文件和 `index.dart`，互不依赖父模块，依赖管理清晰。
+
+## 1. 目录结构与命名
+
+每当新建功能模块（如 text_translation、photo_translation、image_translation 等），请生成如下结构：
+
+```
+pages/{feature_name}/
+├── view.dart // {FeatureName}Page，继承 StatelessWidget
+├── controller.dart // {FeatureName}Controller，继承 GetxController
+├── index.dart // 导出本目录所有内容
+├── widgets/ // 相关可复用组件
+│ └── my_widget.dart // MyWidget
+├── dialog/ // 弹框相关组件
+│ └── confirm_dialog.dart // ConfirmDialog
+└── {sub_feature}/ // 子功能目录
+    ├── view.dart
+    ├── controller.dart
+    ├── index.dart
+```
+
+## 2. 命名规范
+
+- `{feature_name}` 为英文小写下划线
+- `{FeatureName}` 为大驼峰
+- Widget 类名为 `{FeatureName}Page`
+- Controller 类名为 `{FeatureName}Controller`
+- 组件、弹框类名大驼峰，文件名小写下划线
+- 代码需有简要中文注释
+
+## 3. 细致代码规则
+
+- 主页面需包含模块主入口的基础 UI 元素（如标题栏、主操作入口）
+- 控制器需管理主业务流程，核心方法需简要注释
+- 组件需单文件单类、职责清晰
+- index.dart 统一导出本目录全部类
+- 状态管理统一用 GetX
+
+### 3.0 注意事项
+
+- **不要使用 `Get.context` 获取 context**。在 View、Obx、子组件或异步回调中需要用到 `BuildContext` 时，应由**外部传入**（如 `build(BuildContext context)` 的 `context`、方法参数 `void foo(BuildContext context)`），避免使用 `Get.context` 或 `Get.context!`，否则在部分构建时机可能为 null 导致异常。
+
+### 3.1 组件生成规则
+
+可参考文件 `task-ui_task.mdc`（UI生成规范）
+
+#### 3.1.1 Text 组件
+- 使用 `Text` 组件时，需添加 `style` 属性，确保字体大小、颜色符合设计规范。
+- color 优先使用 `color: Theme.of(context).colorScheme.xxxx`，再其次寻找设置好的颜色，如果没有对应颜色，则使用 `Color('0xxxxxxx')`。
+- 已定义的颜色：
+  ```dart
+  const scheme = ColorScheme.light(
+    // 页面背景色
+    surface: Color(0xFFF6F6F6),
+    // 页面上的文字颜色
+    onSurface: Color(0xFF333333),
+    // 卡片颜色
+    surfaceContainer: Colors.white,
+    primary: primary,
+    onPrimary: Color(0xFFF6F9FF),
+    onSecondary: Color(0xFF999999),
+    outline: Color(0xFFF6F6F6),
+    error: error,
+    onError: Colors.white,
+  )
+  static const mainBackground = Color(0xFF000000);
+  static const secondBackground = Color(0xff15161A);
+  static const cardBackground = Color(0xff18191D);
+  static const buttonBackground = Color(0x1aFFFFFF);
+  static const lineColor = Color(0x33FFFFFF);
+  static const Color mainTextColor = Color(0xFF999999);
+  static const Color secondTextColor = Color(0xFF9e9e9e);
+  static const Color textStrongColor = Color(0xFF333333);
+  static const Color textNormalColor = Color(0xFF666666);
+  static const Color textWeakColor = Color(0xFF999999);
+  static const Color textColor3 = Color(0xFFE7D4FF);
+  static const Color textColor4 = Color(0xFFB2B2B2);
+  static const Color textColor5 = Color(0xFF717377);
+  ```
+- 示例：`Text('示例文本', style: TextStyle(fontSize: 16, color: Colors.black 或者 Theme.of(context).colorScheme.onSurface))`
+
+### 3.2 动态界面生成规则（StatefulWidget 规范）
+
+> 本规则仅适用于需要继承 StatefulWidget 的动态界面。其它场景请遵循通用规范。
+
+#### 3.2.1 页面与 Controller 命名强关联
+
+- 页面类命名为 `{FeatureName}Page`，如 `MainPage`、`TextTranslationPage`。
+- 对应的 Controller 命名为 `{FeatureName}Controller`，如 `MainController`、`TextTranslationController`。
+
+#### 3.2.2 GetBuilder 用法规范
+
+- 在页面的 `build` 方法中，**必须用 `GetBuilder` 包裹页面内容**。
+- `init` 参数传入本页面对应的 Controller 实例。
+  - 规则为：页面类名去掉 `Page` 后，加 `Controller`，写作 `init: {FeatureName}Controller()`。
+- `builder` 回调中的参数变量统一命名为 `controller`。
+
+#### 3.2.3 页面根节点推荐
+
+- 推荐使用自定义的 `CustomScaffold` 作为页面根节点。
+- 所有页面内容都包裹在 `CustomScaffold` 内。
+
+#### 3.2.4 代码模板
+
+```dart
+class MainPage extends StatefulWidget {
+  const MainPage({Key? key}) : super(key: key);
+
+  @override
+  State<MainPage> createState() => _MainPageState();
+}
+
+class _MainPageState extends State<MainPage> {
+  @override
+  Widget build(BuildContext context) {
+    return GetBuilder<MainController>(
+      init: MainController(),
+      builder: (controller) => CustomScaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            onPressed: () => Navigator.maybePop(context),
+            icon: Image.asset(
+              AssetImages.icon_back,
+              width: 22,
+              height: 22,
+            )
+          ),
+          title: Text('文档翻译', style: TextStyle(fontSize: 18, color: Theme.of(context).colorScheme.onSurface)),
+          centerTitle: true,
+          actions: [
+            IconButton(
+              icon: Image.asset(AssetImages.icon_history),
+              onPressed: () => controller.goHistory(context),
+            ),
+          ],
+        ),
+        // 页面内容
+        body:...
+      ),
+    );
+  }
+}
+```
+
+#### 3.2.5 弹框的生成规则
+
+- 所有弹框组件必须放置于 `pages/{feature_name}/dialog/` 目录下，文件名采用小写下划线（如 `confirm_dialog.dart`）。
+- 弹框类必须继承 `StatelessWidget`，类名使用大驼峰（如 `ConfirmDialog`）。
+- 弹框组件必须提供静态 `show` 方法，封装 `showDialog`（或 `showCupertinoDialog` 等）调用，方法签名格式如下：
+  ```dart
+  static Future<T?> show<T>(
+    BuildContext context, {
+    required /* 参数列表 */,
+  })
+  ```
+
+### 3.3 Controller 规则（GetxController 规范）
+
+> 本规则适用于所有页面和组件使用的 Controller 代码编写场景。
+
+#### 3.3.1 Controller 继承约定
+
+- 所有 Controller 必须继承 `GetxController`。
+
+#### 3.3.2 数据来源与注入
+
+- 界面所有可变数据、业务状态都应从 Controller 提供。
+- 若界面需要外部数据（如路由、父页面等参数），应通过 Controller 构造方法接收，并存为成员变量。
+- 界面层通过 Controller 暴露的变量/方法进行数据交互，不允许直接处理业务数据。
+
+#### 3.3.3 变量声明与更新机制
+
+- 可变数据统一以 `.obs` 修饰（如 `var count = 0.obs;`），以支持 GetX 的响应式界面更新。
+- 页面需通过 `controller.xxx.value` 访问和更新数据。
+
+#### 3.3.4 事件与业务逻辑管理
+
+- 所有业务逻辑、事件处理、点击事件、弹框显示等，**均须在 Controller 内部实现**。
+- 界面只负责 UI 展示及简单调用 Controller 方法，不得直接写业务逻辑。
+- 弹框、对话框等操作，建议在 Controller 通过调用工具类实现，并对外提供方法（如 `showConfirmDialog()`）。
+
+#### 3.3.5 数据加载规范（重要）
+
+- **所有数据加载操作必须在 Controller 中实现，禁止在页面（View）或弹框组件中直接调用 API 加载数据**。
+- 页面、弹框、对话框等 UI 组件只能通过 Controller 暴露的方法和响应式变量获取数据。
+- 数据加载应在 Controller 的 `onInit()` 方法中自动触发，或通过 Controller 提供的公开方法手动触发。
+- 使用 `.obs` 修饰数据列表和加载状态，实现响应式更新。
+- 错误处理应在 Controller 中统一处理，UI 层只负责展示错误状态。
+
+**错误示例（禁止）：**
+```dart
+// ❌ 错误：在页面/弹框中直接加载数据
+class HistoryDialog extends StatefulWidget {
+  @override
+  void initState() {
+    super.initState();
+    _loadData(); // ❌ 禁止在UI层加载数据
+  }
+
+  Future<void> _loadData() async {
+    final data = await API.getData(); // ❌ 禁止
+  }
+}
+```
+
+**正确示例：**
+```dart
+// ✅ 正确：在Controller中加载数据
+class HistoryDialogController extends GetxController {
+  final items = <Item>[].obs;
+  final isLoading = true.obs;
+
+  @override
+  void onInit() {
+    super.onInit();
+    loadData(); // ✅ 在Controller中加载
+  }
+
+  Future<void> loadData() async {
+    isLoading.value = true;
+    try {
+      final response = await API.getData();
+      items.value = response.items;
+    } catch (e) {
+      // 错误处理
+    } finally {
+      isLoading.value = false;
+    }
+  }
+}
+
+// ✅ 正确：UI层只负责展示
+class HistoryDialog extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return GetBuilder<HistoryDialogController>(
+      init: HistoryDialogController(),
+      builder: (controller) {
+        if (controller.isLoading.value) {
+          return LoadingWidget();
+        }
+        return ListView(...);
+      },
+    );
+  }
+}
+```
+
+#### 3.3.6 Context 获取规范（重要）
+
+- **禁止在 Controller 中使用 `Get.context` 获取 context**，`Get.context` 可能无法可靠获取到正确的 context。
+- **推荐方式**：通过方法参数传递 context，或使用 View 层的 context。
+
+**错误示例：**
+```dart
+// ❌ 错误：使用 Get.context
+Future.delayed(const Duration(seconds: 3), () {
+  if (Get.context != null) {
+    Get.context!.go('/'); // ❌ 禁止
+  }
+});
+```
+
+**正确示例：**
+```dart
+// ✅ 正确：通过参数传递 context
+void enterApp(BuildContext context) {
+  context.go('/');
+}
+
+// ✅ 正确：在 View 层使用 context
+@override
+void initState() {
+  super.initState();
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted && context.mounted) {
+        context.go('/');
+      }
+    });
+  });
+}
+```
+
+#### 3.3.7 其它规范与建议
+
+- 控制器成员变量应有简要注释，方法命名语义清晰。
+- Controller 文件应与页面一一对应（如 `MainPage` 对应 `MainController`），命名与目录见 3.2 规则。
+- 尽量避免在 Controller 直接访问 UI 相关对象，保持业务与表现层解耦。
+- 控制器需要主动清理资源时，可重写 `onClose` 方法。
+
+#### 3.3.8 代码模板示例
+
+```dart
+class MainController extends GetxController {
+  // 通过构造方法接收外部参数
+  MainController({this.initialValue});
+
+  // 可变数据，响应式更新界面
+  final count = 0.obs;
+
+  final String? initialValue;
+
+  // 业务逻辑、点击事件在 Controller 实现
+  void increment() => count.value++;
+
+  // 弹框逻辑放在 Controller 内部
+  void showConfirmDialog() {
+    Get.dialog(
+      AlertDialog(
+        title: Text('提示'),
+        content: Text('确定要执行操作吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(),
+            child: Text('取消'),
+          ),
+          TextButton(
+            onPressed: () {
+              // 确认逻辑
+              Get.back();
+            },
+            child: Text('确定'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 生命周期管理
+  @override
+  void onClose() {
+    super.onClose();
+    // 清理资源
+  }
+}
+```
+
+### 3.4 路由注册与跳转规则（GoRouter + RouteName 规范）
+
+> 本规则适用于所有页面/模块涉及路由注册与跳转的场景。
+
+#### 3.4.1 路由注册规范
+
+- 项目全局路由统一注册于 `lib/routes/router.dart` 文件下的 `CustomRouter` 类。
+- 每新增一个页面（如 `SpeechRecognitionPage`），都必须在 `CustomRouter.config` 的 `routes` 列表中**注册一个 GoRoute**，并指定对应的路径与 `RouteName`。
+- **路径命名**采用小写下划线，建议与页面英文名及功能一致，如 `/speech_recognition`、`/photo_translation`。
+- **路由名**统一使用 `RouteName.xxx`，在 `RouteName` 类中声明。
+- 页面跳转统一采用**命名路由**方式：
+  ```dart
+  context.pushNamed(RouteName.xxx);
+  ```
+
+#### 3.4.2 路由数据传递与回传规则
+
+##### 3.4.2.1 路由数据传递规范
+
+- 路由间数据传递，必须使用 GoRouter 标准参数，**禁止使用全局变量、静态字段等隐式方式**。
+
+- 推荐的数据传递方式有三种：
+  1. **queryParameters**：适用于简单的 key-value 字符串（如 id、type、token）。
+     - 跳转写法：
+       ```dart
+       context.pushNamed(
+         RouteName.web,
+         queryParameters: {'url': 'https://www.example.com'},
+       );
+       ```
+     - 页面获取方式：
+       ```dart
+       final url = state.uri.queryParameters['url'];
+       ```
+  2. **extra**：适用于复杂对象（如模型、Map、参数类等）。
+     - 跳转写法：
+       ```dart
+       context.pushNamed(
+         RouteName.speech_recognition,
+         extra: SpeechRecognitionParams(...),
+       );
+       ```
+     - 页面获取方式：
+       ```dart
+       final params = state.extra as SpeechRecognitionParams;
+       ```
+  3. **path参数**（如 `/user/:id`）：适用于唯一主键或必要资源ID。
+     - 跳转写法：
+       ```dart
+       context.pushNamed(RouteName.user, params: {'id': '123'});
+       ```
+     - 页面获取方式：
+       ```dart
+       final userId = state.params['id'];
+       ```
+
+- **不允许**通过 import、全局单例或静态变量传递页面间参数。
+
+##### 3.4.2.2 路由回传数据规范
+
+- 页面跳转如需回传结果，**必须使用 `await context.pushNamed(...)` 并在目标页面用 `context.pop(result)` 返回**。
+- 推荐写法：
+  ```dart
+  // 发起跳转并等待回传
+  final result = await context.pushNamed(RouteName.edit, extra: EditParams(...));
+
+  // 目标页面返回
+  context.pop(resultValue);
+  ```
+
+- 示例注册代码：
+  ```dart
+  GoRoute(
+    path: '/speech_recognition',
+    name: RouteName.speech_recognition,
+    pageBuilder: (context, state) => CupertinoPage(
+      name: state.fullPath,
+      key: state.pageKey,
+      child: const SpeechRecognitionPage(),
+    ),
+  ),
+  ```
+
+#### 3.4.2.3 页面类引用与 index.dart 统一导出规则
+
+- 所有在 `CustomRouter`（`lib/routes/router.dart`）注册为路由页面的类，如 `SpeechRecognitionPage`、`PhotoTranslationPage` 等，**都必须在 `lib/routes/index.dart` 进行 `export` 统一导出**。
+
+- `lib/routes/router.dart` 文件中，只需通过如下语句一次性引入所有页面类：
+  ```dart
+  import 'package:your_app/routes/index.dart';
+  ```
+
+#### 3.4.3 子路由（SubRoutes）规范
+
+##### 3.4.3.1 命名与路径
+
+- **主功能**使用根路径（如 `/ai_picture`）。
+- **子功能**使用**相对路径**（不以 `/` 开头），如 `records`、`success`、`change_success`。
+  - 最终完整路径形如：`/ai_picture/records`、`/ai_picture/success`。
+- **路由名**统一在 `RouteName` 中声明，保持主从语义一致：
+  - `RouteName.ai_picture`
+  - `RouteName.ai_picture_records`
+  - `RouteName.ai_picture_success`
+  - `RouteName.ai_picture_change_success`
+
+##### 3.4.3.2 注册与导出
+
+- 子路由写在父路由的 `routes: []` 中。
+- 所有页面类（父/子）**必须**在 `lib/routes/index.dart` 统一 `export`：
+  ```dart
+  // lib/routes/router.dart
+  import 'package:your_app/routes/index.dart';
+  ```
+
+##### 3.4.3.3 参数与回传
+
+- 传参与回传沿用 3.4.2 的规则与写法（queryParameters / extra / path 参数 + await pushNamed / pop）。
+- 子页严格通过 state.extra / state.uri.queryParameters / state.pathParameters 取参，禁止隐式传递。
+
+##### 3.4.3.4 导航与栈行为
+
+- 允许从任意页面直接 pushNamed 到子路由，GoRouter 会构造正确栈。
+- 父→子页面也统一使用命名路由，不手工拼接字符串路径。
+- 列表/标签位切换等需要替换当前栈的场景，使用 goNamed。
+
+##### 3.4.3.5 标准示例
+
+```dart
+GoRoute(
+  path: '/ai_picture',
+  name: RouteName.ai_picture,
+  pageBuilder: (context, state) => CupertinoPage(
+    name: state.fullPath,
+    key: state.pageKey,
+    child: const AIPicturePage(),
+  ),
+  routes: [
+    GoRoute(
+      path: 'success',
+      name: RouteName.ai_picture_success,
+      pageBuilder: (context, state) {
+        final map = state.extra;
+        assert(map is Map, '[ai_picture_success] requires Map in state.extra');
+        return CupertinoPage(
+          name: state.fullPath,
+          key: state.pageKey,
+          child: AIPictureSuccessPage(map: map as Map),
+        );
+      },
+    ),
+    GoRoute(
+      path: 'records',
+      name: RouteName.ai_picture_records,
+      pageBuilder: (context, state) {
+        final idx = (state.extra is int) ? state.extra as int : 0;
+        return CupertinoPage(
+          name: state.fullPath,
+          key: state.pageKey,
+          child: AIPictureRecordsPage(currentIndex: idx),
+        );
+      },
+    ),
+    GoRoute(
+      path: 'change_success',
+      name: RouteName.ai_picture_change_success,
+      pageBuilder: (context, state) {
+        final data = state.extra;
+        assert(
+          data is AiRecordResponse,
+          '[ai_picture_change_success] requires AiRecordResponse in state.extra',
+        );
+        return CupertinoPage(
+          name: state.fullPath,
+          key: state.pageKey,
+          child: AIPictureChangeSuccessPage(map: data as AiRecordResponse),
+        );
+      },
+    ),
+  ],
+);
+```
+
+### 3.5 View 层依赖引用规范（Dart part机制 & import机制）
+
+#### 3.5.1 总则
+
+- 每个功能模块目录（如 `pages/xxx/`）下，**所有 Dart 文件的依赖引用统一在 `index.dart` 文件管理**。
+- 除了 `index.dart`，其他 Dart 文件（如 `view.dart`、`controller.dart`、`widgets/*.dart`、`dialog/*.dart`）**禁止直接 import 彼此或本地其它业务文件**。
+- **推荐用 Dart 的 `part` 和 `part of` 机制**组织本模块的成员文件，避免循环依赖和 import 混乱。
+
+#### 3.5.2 依赖管理细则
+
+- `index.dart` 负责：
+  - import 所有外部依赖（如 flutter、get、go_router、全局 widgets、全局工具类等）。
+  - 用 `part` 声明所有本模块成员文件：
+    ```dart
+    part 'view.dart';
+    part 'controller.dart';
+    part 'widgets/translation_input.dart';
+    part 'dialog/confirm_dialog.dart';
+    // ...其余文件
+    ```
+
+- 本模块其余 Dart 文件头部统一写：
+  ```dart
+  part of 'index.dart';
+  ```
+  - 这样即可直接访问本模块中其它类/方法，无需单独 import。
+
+- 新增模块成员文件时，**必须同步在 `index.dart` 添加 `part` 声明**，否则会编译报错。
+
+- 所有 view/controller/widgets/dialog 文件**只能访问本模块 `index.dart` 暴露的依赖和类**，不允许出现 `import` 语句引用本地其它类文件（全局依赖只允许在 index.dart import）。
+
+#### 3.5.3 子模块依赖管理（如 favorites、history）
+
+- 每个子模块目录（如 `pages/text_translation/favorites/`）**独立组织自身文件**，只管理本目录下的 `view.dart`、`controller.dart`、`index.dart`，**互不依赖父模块 index.dart**，不与父模块产生 part of 或其它关系。
+- 子模块 `index.dart` 可直接 import 外部依赖（如 flutter、get、全局 widgets 等）。
+- 子模块的 `index.dart` 只需用 `part` 管理本子模块的 `view.dart`、`controller.dart` 文件：
+  ```dart
+  part 'view.dart';
+  part 'controller.dart';
+  ```
+- 子模块中的其它 Dart 文件，头部统一写 `part of 'index.dart';`。
+- 子模块**不强制 nor 推荐**引用父模块的任何成员（包括 index.dart），每个子模块是"独立的小单元"，只需保证自身文件结构和依赖清晰。
+- 若确实需要父模块的全局依赖，可在本子模块 `index.dart` 直接 import，**不要通过 part 链接父模块**。
+
+##### 【子模块代码结构示例】
+
+```dart
+// pages/text_translation/favorites/index.dart
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import '../../../widgets/index.dart';
+
+part 'view.dart';
+part 'controller.dart';
+
+// pages/text_translation/favorites/view.dart
+part of 'index.dart';
+// 可直接使用本子模块 controller、view 等
+
+// pages/text_translation/favorites/controller.dart
+part of 'index.dart';
+// 可直接使用外部依赖和本模块内部内容
+```
+
+#### 3.5.4 代码结构示例
+
+```dart
+// pages/text_translation/index.dart
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:go_router/go_router.dart';
+import '../../routes/index.dart';
+import '../../widgets/index.dart';
+// 其它全局依赖如 CustomScaffold
+
+part 'view.dart';
+part 'controller.dart';
+part 'dialog/dialog.dart';
+part 'dialog/detail_dialog.dart';
+part 'widgets/widgets.dart';
+// ...如有其它文件
+
+// pages/text_translation/view.dart
+part of 'index.dart';
+// 可直接使用 TranslationInput、TextTranslationController 等
+
+// pages/text_translation/controller.dart
+part of 'index.dart';
+// 可直接使用全局依赖、view、widgets 等
+
+// pages/text_translation/favorites/index.dart
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import '../../../widgets/index.dart';
+
+part 'view.dart';
+part 'controller.dart';
+
+// pages/text_translation/favorites/view.dart
+part of 'index.dart';
+// 可直接使用本子模块内 controller、view 等
+```
+
+## 4. 适用范围声明与调用提示
+
+> 仅在**新建功能模块时**生效，AI 应根据上下文智能判断何时应用。
+>
+> 建议在 prompt 中明确："请按 new_feature.mdc 规则为我新建 {feature_name} 功能模块"
+
+## 5. 示例（如新建 photo_translation 功能）
+
+```
+pages/photo_translation/
+├── view.dart // PhotoTranslationPage
+├── controller.dart // PhotoTranslationController
+├── index.dart
+├── widgets/
+│ └── image_picker.dart // ImagePicker
+├── dialog/
+│ └── confirm_dialog.dart // ConfirmDialog
+└── scan/
+    ├── view.dart // ScanPage
+    ├── controller.dart // ScanController
+    ├── index.dart
+```
+
+## 6. 检查清单
+
+新功能开发完成后，检查以下项目：
+
+- [ ] 功能完整实现
+- [ ] 代码符合项目规范
+- [ ] 文件结构正确（包含所有必需的文件和目录）
+- [ ] 所有文件都通过 `index.dart` 正确导出
+- [ ] Controller 正确继承 GetxController 并实现业务逻辑
+- [ ] UI 完整实现（包括标题栏、主操作区等）
+- [ ] 路由正确注册（RouteName 和 CustomRouter.config）
+- [ ] 路由参数传递和回传正确实现
+- [ ] 子模块（如有）独立组织，依赖清晰
+- [ ] 弹框组件（如有）正确实现静态 show 方法
+- [ ] 状态管理正确（使用 .obs 和响应式更新）
+- [ ] API调用正确（如需要）
+- [ ] 错误处理已添加
+- [ ] UI符合设计要求
+- [ ] 与现有功能集成正常
+- [ ] 性能良好
+- [ ] 代码可维护
+
+## 7. 备注
+
+- 如需扩展专属细则，可为具体功能模块单独创建对应规则文件。
+- UI 组件生成规则请参考 `task-ui_task.mdc`（UI生成规范）。

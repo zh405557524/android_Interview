@@ -1,0 +1,194 @@
+---
+description: 剧说 Flutter 项目结构目录与功能层级
+globs: "lib/**/*.dart"
+alwaysApply: true
+---
+
+# 02-项目结构目录
+
+## 1. 顶层结构
+
+```text
+lib/
+├── apis/                  # 真实接口静态 API 封装
+├── components/            # 跨页面业务组件
+├── enums/                 # 全局枚举
+├── generated/             # 生成代码，只读
+├── l10n/                  # 多语言资源
+├── models/                # 参数、响应、领域模型
+├── pages/                 # 页面与页面子流程
+├── plugins/               # 平台能力和第三方 SDK 封装
+├── routes/                # go_router 路由
+├── services/              # HTTP、存储、事件、mock、平台服务
+├── store/                 # 跨页面全局状态
+├── utils/                 # 常量、资源、格式化、日志
+├── widgets/               # 与业务解耦的基础 UI
+├── global.dart
+├── main.dart
+└── theme.dart
+```
+
+## 2. 页面模块标准结构
+
+所有 `lib/pages/{feature_name}/` 都以同一套标准结构为基础，但只创建真实需要的目录。没有私有组件就不创建 `widgets/`；没有弹层就不创建 `dialog/`；没有子流程就不创建 `{sub_feature}/`。
+
+`widgets/`、`dialog/`、`{sub_feature}/` 是可选槽位，不是必建目录。是否创建必须来自 Figma UI 层级、模块文档或真实复用需求，不能凭想象预拆。项目结构示意树里也遵循同一规则：没有就不显示，有才显示。
+
+```text
+lib/pages/{feature_name}/
+├── view.dart             # {FeatureName}Page，页面根视图
+├── controller.dart       # {FeatureName}Controller，业务/状态控制
+├── index.dart            # 导出或聚合本目录所有内容
+├── widgets/              # 页面内可复用组件，存在真实复用或 Figma 层级需求时才创建
+│   └── my_widget.dart    # MyWidget
+├── dialog/               # 弹框、BottomSheet、Picker 等页面私有弹层
+│   └── confirm_dialog.dart
+└── {sub_feature}/        # 子页面或独立子流程
+    ├── view.dart
+    ├── controller.dart
+    └── index.dart
+```
+
+可选槽位只在真实存在时保留：`widgets/` 用于页面内可复用组件，`dialog/` 用于弹框、Sheet、Picker 等弹层入口与 UI，`{sub_feature}/` 用于独立子页面或子流程。
+
+子功能如果本身是独立页面或独立流程，也继续使用同样标准：
+
+```text
+lib/pages/{feature_name}/{sub_feature}/
+├── index.dart
+├── controller.dart
+└── view.dart
+```
+
+禁止把子页面写成 `detail_controller.dart`、`recharge_view.dart` 这类扁平文件。详情、充值、流水等都必须放到自己的 `{sub_feature}/` 目录里。
+
+禁止在未读取对应 Figma frame 前预设具体 widget 文件名。例如创作首页不能想当然拆成 `home_tab.dart`、`home_case_card.dart`；是否拆分、如何命名，必须由 Figma UI 层级决定。
+
+## 3. 功能层级目录
+
+```text
+lib/pages/
+├── main/                  # T-F003 主框架与创作首页
+│   ├── index.dart
+│   ├── controller.dart
+│   └── view.dart
+├── auth/                  # T-F002 登录模块
+│   ├── index.dart
+│   ├── controller.dart
+│   └── view.dart
+├── account/               # T-F007 我的页
+│   ├── index.dart
+│   ├── controller.dart
+│   └── view.dart
+├── creation/              # T-F004/T-F005 创作流程
+│   ├── index.dart
+│   ├── controller.dart
+│   ├── view.dart
+│   └── dialog/            # Figma 已有风格、配音、更多设置、选择视频、删除确认等弹层
+├── works/                 # T-F006 作品模块
+│   ├── index.dart
+│   ├── controller.dart
+│   ├── view.dart
+│   └── detail/            # 作品详情子流程
+│       ├── index.dart
+│       ├── controller.dart
+│       └── view.dart
+├── membership/            # T-F008 VIP 会员页
+│   ├── index.dart
+│   ├── controller.dart
+│   └── view.dart
+├── points/                # T-F008 积分充值与积分详情
+│   ├── index.dart
+│   ├── controller.dart
+│   ├── view.dart
+│   ├── recharge/          # 积分充值子流程
+│   │   ├── index.dart
+│   │   ├── controller.dart
+│   │   └── view.dart
+│   └── ledger/            # 积分详情 / 流水子流程
+│       ├── index.dart
+│       ├── controller.dart
+│       └── view.dart
+├── invite/                # T-F009 邀请好友
+│   ├── index.dart
+│   ├── controller.dart
+│   └── view.dart
+├── settings/              # T-F010 更多设置
+│   ├── index.dart
+│   ├── controller.dart
+│   └── view.dart
+├── feedback/              # T-F011 意见反馈
+│   ├── index.dart
+│   ├── controller.dart
+│   └── view.dart
+└── webview/               # 协议、隐私、规则页
+    ├── index.dart
+    ├── controller.dart
+    └── view.dart
+```
+
+## 4. 数据层目录
+
+```text
+lib/apis/
+├── auth.dart              # `abstract class AuthAPI`，只写真实接口静态方法
+├── home.dart              # `abstract class HomeAPI`
+├── creation.dart          # `abstract class CreationAPI`
+├── works.dart             # `abstract class WorksAPI`
+├── payment.dart           # `abstract class PaymentAPI`
+├── points.dart            # `abstract class PointsAPI`
+├── invite.dart            # `abstract class InviteAPI`
+├── feedback.dart          # `abstract class FeedbackAPI`
+├── helpers.dart           # 响应 data / list / page 解析工具
+└── index.dart
+
+`apis/` 是真实接口封装层，不负责 mock / real 开关，不保存 mock 数据，不注册 Get 实例。真实接口路径直接写在对应 API 静态方法内，后端定稿后只改这一层。
+
+lib/models/
+├── params/
+│   ├── login_params.dart
+│   └── feedback_params.dart
+├── responses/
+└── data/
+    ├── creation_draft.dart
+    ├── creation_material.dart
+    ├── creation_style.dart
+    ├── generation_estimate.dart
+    ├── home_case.dart
+    ├── invite_record.dart
+    ├── membership_plan.dart
+    ├── points_ledger_item.dart
+    ├── points_package.dart
+    ├── user_profile.dart
+    ├── voice_role.dart
+    ├── work.dart
+    └── work_detail.dart
+```
+
+## 5. 状态与服务层级
+
+```text
+lib/store/
+├── config.dart            # 协议、版本、mock 开关
+├── creation.dart          # 当前创作草稿
+├── user.dart              # 登录态、用户、积分、会员、邀请码
+└── index.dart
+
+lib/services/
+├── event.dart             # 全局事件
+├── http.dart              # Dio 与错误转换
+├── mock.dart              # mock 成功、失败、空数据、延迟
+├── storage.dart           # GetStorage + Hive
+└── index.dart
+```
+
+## 6. 结构约束
+
+- 不新增 `core/`、`app/`、`controllers/` 替代既定结构。
+- 页面模块必须至少使用 `index.dart + controller.dart + view.dart`。
+- `widgets/`、`dialog/`、`{sub_feature}/` 只在确实存在对应内容时创建；没有就不显示、不创建。
+- 子页面、详情页、充值页、流水页等独立流程必须作为 `{sub_feature}/`，不能写成顶层扁平文件。
+- 私有页面组件如确实需要拆分，放本模块 `widgets/`，但具体文件名必须来自 Figma UI 层级或真实复用需求。
+- 私有弹层如确实需要拆分，放本模块 `dialog/`，但具体文件名必须来自 Figma UI 层级或真实弹层需求。
+- 跨页面业务组件放 `components/`。
+- 基础 UI 放 `widgets/`。
