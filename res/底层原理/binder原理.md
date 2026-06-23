@@ -56,9 +56,9 @@
 
   
   
-  ![1](/pic_res/binder的由来.jpg)
+  ![1](pic_res/binder的由来.jpg)
   
-  ![](/pic_res/binder优点.png)
+  ![](pic_res/binder优点.png)
 
 ## 三、binder 跨进程通信原理
 

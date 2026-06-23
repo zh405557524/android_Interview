@@ -1,0 +1,7 @@
+# Ignore Mac system files
+.DS_Store
+res/.DS_Store
+"res/2026知识整理/.DS_Store"
+
+# (Optional) If you want to ignore all .DS_Store files everywhere:
+**/.DS_Store

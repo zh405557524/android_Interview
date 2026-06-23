@@ -37,6 +37,7 @@
   > 3、混合 同时使用  `onCreate` 只会执行一次，只有解除绑定后 `stopService` 才会生效
 
 * `intentService`
+  
   * 生命周期 `onCreate` ->`onStartCommand`->`onHandleIntent` ->`onDestroy` 
   * `onhandleIntent` 在子线程，并且任务执行完，则销毁。
   * 多次调用，耗时任务在 `onhandleIntent`中执行，第一个执行完，才执行第二个。
@@ -54,6 +55,7 @@
   > 3、混合 同时使用  `onCreate` 只会执行一次，只有解除绑定后 `stopService` 才会生效
 
 * `intentService`
+  
   * 生命周期 `onCreate` ->`onStartCommand`->`onHandleIntent` ->`onDestroy` 
   * `onhandleIntent` 在子线程，并且任务执行完，则销毁。
   * 多次调用，耗时任务在 `onhandleIntent`中执行，第一个执行完，才执行第二个。
